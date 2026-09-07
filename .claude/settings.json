@@ -1,0 +1,20 @@
+{
+  "extraKnownMarketplaces": {
+    "rpg-mode": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "rpg-mode@rpg-mode": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node tests/rpg-state.test.js)",
+      "Bash(node hooks/rpg-state.js:*)",
+      "Bash(claude plugin:*)"
+    ]
+  }
+}

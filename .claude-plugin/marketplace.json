@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "rpg-mode",
+  "description": "RPG 모드 — 작업을 퀘스트로 서술하고 XP·레벨을 실제로 누적한다.",
+  "owner": {
+    "name": "tnghk"
+  },
+  "plugins": [
+    {
+      "name": "rpg-mode",
+      "description": "Talk like an RPG. Real XP and levels from real signals.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+node_modules/
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 다른 플러그인이 작업 폴더에 흘리는 것
+.claude-flow/
+.swarm/
+
+# ruflo 가 자동 생성 — 이 플러그인과 무관
+.claude/proven-config.json
+.claude/.proven-config-version

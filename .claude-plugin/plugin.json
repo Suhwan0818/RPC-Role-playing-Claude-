@@ -1,0 +1,9 @@
+{
+  "name": "rpg-mode",
+  "version": "0.1.0",
+  "description": "Claude Code 응답을 RPG 게임처럼. 퀘스트/전투 서술 + 실제 XP·레벨 누적.",
+  "hooks": "./hooks/hooks.json",
+  "author": {
+    "name": "tnghk"
+  }
+}
