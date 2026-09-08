@@ -44,13 +44,16 @@ assert.strictEqual(loss.leveledUp, false);
 // ── 깨진 상태 파일 복구 ────────────────────────────────────────
 fs.writeFileSync(statePath, '{ 이건 JSON 이 아니다', 'utf8');
 assert.deepStrictEqual(state.read(), {
-  mode: 'full', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 },
+  mode: 'full', lang: 'ko', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 },
   projects: {}, session: null, lastSession: null, updatedAt: null,
 });
 
 fs.writeFileSync(statePath, JSON.stringify({ mode: '이상한모드', xp: 300, level: 99, streak: -5 }));
 const repaired = state.read();
 assert.strictEqual(repaired.mode, 'full', '알 수 없는 모드는 기본값으로');
+assert.strictEqual(state.read().lang, 'ko', '언어가 없으면 기본값 ko');
+assert.strictEqual(state.write({ mode: 'full', xp: 0, lang: 'fr' }).lang, 'ko', '모르는 언어는 버린다');
+assert.strictEqual(state.write({ mode: 'full', xp: 0, lang: 'en' }).lang, 'en', '아는 언어는 남긴다');
 assert.strictEqual(repaired.level, 3, '저장된 level 은 무시하고 xp 에서 재계산');
 assert.strictEqual(repaired.streak, 0, '음수 연속은 0 으로');
 

@@ -71,7 +71,12 @@ let next = startSession(state);
 try {
   const scan = evaluate(projectRoot);
   const known = state.projects[projectRoot];
-  out.push('', '## 이번 프로젝트 (측정값 — 이 수치 밖의 것은 지어내지 말 것)', '', card(scan));
+  out.push(
+    '',
+    '## 이번 프로젝트 (측정값 — 이 수치 밖의 것은 지어내지 말 것)',
+    '',
+    card(scan, { lang: state.lang })
+  );
 
   if (known && known.rank !== scan.rank.tier) {
     const up = scan.rank.tier > known.rank;

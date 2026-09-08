@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { t, DEFAULT_LANG } = require('./rpg-text');
 
 const BUDGET_MS = 3000; // 전체 예산. 넘으면 그때까지의 값으로 partial 반환
 const MAX_FILES = 5000;
@@ -279,33 +280,41 @@ function rankProject(m, weight) {
   return { score, tier, gates, ...RANKS[tier] };
 }
 
-/** 사람이 읽는 카드. 아트를 뺄 수도 있다. */
-function card(r, { art = true } = {}) {
+/**
+ * 사람이 읽는 카드. 아트를 뺄 수도, 영어로 낼 수도 있다.
+ * 계급·무게 이름은 표가 두 언어를 다 들고 있으므로 lang 에 맞는 쪽을 쓴다.
+ */
+function card(r, { art = true, lang = DEFAULT_LANG } = {}) {
   const lines = [];
   if (art) lines.push(...ART[r.rank.tier].map((row) => '   ' + row));
 
   const kb = (n) => (n >= 1024 ? Math.round(n / 1024) + 'KB' : n + 'B');
-  const gate = r.rank.gates.length ? ` (상한: ${r.rank.gates.join(', ')})` : '';
-  const todos = Number.isFinite(r.todos) ? `TODO ${r.todos}` : 'TODO 미측정';
+  const label = (key) => t(lang, key);
+  const gate = r.rank.gates.length ? ` (${label('cap')}: ${r.rank.gates.join(', ')})` : '';
+  const todos = Number.isFinite(r.todos) ? `TODO ${r.todos}` : label('todosUnknown');
+  const rankName = lang === 'en' ? r.rank.en : `${r.rank.ko} (${r.rank.en})`;
+  const weightName = lang === 'en' ? r.weight.en : r.weight.ko;
 
   lines.push(
-    `계급: ${r.rank.ko} (${r.rank.en}) · 점수 ${r.rank.score}/100${gate}`,
-    `규모: 파일 ${r.files} · ${kb(r.bytes)} · 테스트 ${r.tests} · 커밋 ${r.commits} · ${todos}`,
-    `장비 무게: ${r.weight.ko} (지수 ${r.weight.index}, 평균 ${kb(r.weight.avgBytes)}/파일)`
+    `${label('rank')}: ${rankName} · ${label('score')} ${r.rank.score}/100${gate}`,
+    `${label('size')}: ${label('files')} ${r.files} · ${kb(r.bytes)} · ` +
+      `${label('tests')} ${r.tests} · ${label('commits')} ${r.commits} · ${todos}`,
+    `${label('weight')}: ${weightName} (${label('weightIndex')} ${r.weight.index}, ` +
+      `${label('avg')} ${kb(r.weight.avgBytes)}${label('perFile')})`
   );
 
   if (r.heavyCount > 0) {
     const top = r.heavy.map((h) => `${h.file} ${kb(h.bytes)}`).join(', ');
-    lines.push(`거대 파일 ${r.heavyCount}개 (32KB 이상): ${top}`);
+    lines.push(`${label('heavyFiles')} ${r.heavyCount}${label('heavyUnit')}: ${top}`);
   }
 
   const missing = [];
   if (!r.hasReadme) missing.push('README');
-  if (r.tests === 0) missing.push('테스트');
+  if (r.tests === 0) missing.push(label('tests'));
   if (!r.hasCI) missing.push('CI');
-  if (!r.hasManifest) missing.push('매니페스트');
-  if (missing.length) lines.push(`빠진 장비: ${missing.join(', ')}`);
-  if (r.partial) lines.push(`부분 측정 — ${BUDGET_MS}ms 예산 초과. 실제보다 작게 잡혔을 수 있다.`);
+  if (!r.hasManifest) missing.push(label('manifest'));
+  if (missing.length) lines.push(`${label('missing')}: ${missing.join(', ')}`);
+  if (r.partial) lines.push(t(lang, 'partial', BUDGET_MS));
 
   return lines.join('\n');
 }

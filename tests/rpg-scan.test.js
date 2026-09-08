@@ -131,6 +131,16 @@ assert.ok(/[░▒▓█]/.test(text), '기본은 아트 포함');
 assert.ok(!/[░▒▓█]/.test(card(heavy, { art: false })), 'art:false 면 아트를 뺀다');
 assert.ok(card(empty).includes('TODO 미측정'), 'git 이 아니면 미측정이라고 쓴다');
 
+// ── 영어 카드 ────────────────────────────────────────────────────
+const en = card(heavy, { lang: 'en' });
+assert.ok(en.includes('Rank: Knight'), '영어면 계급도 영어 이름만');
+assert.ok(en.includes('Pack weight:'), '무게 라벨도 영어');
+assert.ok(en.includes('capped:'), '상한 라벨도 영어');
+assert.ok(card(empty, { lang: 'en' }).includes('TODO not measured'), '미측정도 영어로');
+
+// 알 수 없는 언어는 기본값(ko)으로 떨어진다
+assert.strictEqual(card(heavy, { lang: 'fr' }), card(heavy), '모르는 언어는 한국어로');
+
 // ── 표가 서로 어긋나지 않는다 ────────────────────────────────────
 assert.strictEqual(RANKS.length, 7);
 for (let i = 1; i < RANKS.length; i += 1) {

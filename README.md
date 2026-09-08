@@ -75,6 +75,11 @@ if (rpg) parts.push(rpg);
 | `/rpg off` | 완전 해제 |
 | `/rpg full` | 다시 켜기 |
 | `/rpg reset` | 누적 XP 를 0 으로 (확인 후 실행) |
+| `/rpg lang en` | 계급 카드·상태줄을 영어로 (`ko` 로 되돌린다) |
+
+`lang` 은 훅이 찍는 라벨에만 걸린다. 서술 언어는 SKILL.md 규칙이 이미 "사용자 언어를
+따라간다" 이므로 영어로 물으면 서술도 영어로 나온다. `auto` 는 없다 — 훅에는 사용자
+언어를 알려주는 신호가 없고, 없는 신호로 추측하지 않는다.
 
 ## 계급 — 프로젝트가 얼마나 자랐나
 
@@ -154,6 +159,7 @@ hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입 + 지난 원정
 hooks/rpg-xp.js                XP 지급, 레벨업 알림
 hooks/rpg-summary.js           SessionEnd — 이번 세션 획득량 기록
 hooks/rpg-statusline.js        statusline 세그먼트 (모듈 겸 CLI)
+hooks/rpg-text.js              훅이 찍는 라벨의 ko/en 표
 skills/rpg/SKILL.md            서술 규칙 원본 — 여기만 고치면 된다
 tests/rpg-state.test.js        상태 저장 · 레벨 곡선 · 프로젝트 기록
 tests/rpg-scan.test.js         계급 · 장비 무게 경계값

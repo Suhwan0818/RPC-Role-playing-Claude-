@@ -11,6 +11,8 @@ const os = require('os');
 const XP_PER_LEVEL = 100; // 레벨 n → n+1 에 필요한 XP = 100 * n
 const MODES = ['full', 'lite', 'off'];
 
+const { t, LANGS, DEFAULT_LANG } = require('./rpg-text');
+
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const STATE_PATH = path.join(claudeDir, '.rpg-state.json');
 
@@ -19,6 +21,7 @@ const MAX_TIER = 15; // rank/weight 구간 번호의 상한. 우리가 쓰는 �
 
 const DEFAULT_STATE = Object.freeze({
   mode: 'full',
+  lang: DEFAULT_LANG,
   xp: 0,
   level: 1,
   streak: 0,
@@ -104,6 +107,7 @@ function normalize(raw) {
   const xp = Number.isFinite(src.xp) && src.xp >= 0 ? Math.floor(src.xp) : 0;
   return {
     mode: MODES.includes(src.mode) ? src.mode : DEFAULT_STATE.mode,
+    lang: LANGS.includes(src.lang) ? src.lang : DEFAULT_LANG,
     xp,
     level: levelFor(xp), // 저장된 level 은 신뢰하지 않고 xp 에서 재계산
     streak: Number.isFinite(src.streak) && src.streak >= 0 ? Math.floor(src.streak) : 0,
@@ -215,31 +219,43 @@ if (require.main === module) {
   const arg = (process.argv[2] || 'status').toLowerCase();
   const current = read();
 
+  const lang = current.lang;
+
   if (arg === 'status') {
     const p = progress(current.xp);
     process.stdout.write(
-      `모드: ${current.mode} | Lv.${p.level} | XP ${p.into}/${p.span} (누적 ${current.xp}) | 연속 ${current.streak}\n`
+      `${t(lang, 'mode')}: ${current.mode} | Lv.${p.level} | ` +
+        `XP ${p.into}/${p.span} (${t(lang, 'total')} ${current.xp}) | ` +
+        `${t(lang, 'streak')} ${current.streak}\n`
     );
     // 현재 프로젝트 카드도 같이. 스캔은 여기서만 필요하므로 이 시점에 불러온다.
     try {
       const scan = require('./rpg-scan');
       const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-      process.stdout.write(scan.card(scan.evaluate(root)) + '\n');
+      process.stdout.write(scan.card(scan.evaluate(root), { lang }) + '\n');
     } catch (e) {
-      process.stdout.write('프로젝트 측정 실패 — 계급은 생략한다.\n');
+      process.stdout.write(t(lang, 'scanFailed') + '\n');
     }
   } else if (arg === 'reset') {
     // 계급은 프로젝트의 성질이지 내 진행도가 아니다. XP 만 되돌린다.
-    write({ ...DEFAULT_STATE, mode: current.mode, projects: current.projects });
-    process.stdout.write('RPG 진행도 초기화됨. Lv.1 XP 0 (프로젝트 계급 기록은 유지)\n');
+    write({ ...DEFAULT_STATE, mode: current.mode, lang, projects: current.projects });
+    process.stdout.write(t(lang, 'resetDone') + '\n');
+  } else if (arg === 'lang') {
+    const next = (process.argv[3] || '').toLowerCase();
+    if (!LANGS.includes(next)) {
+      process.stdout.write(t(lang, 'usage') + '\n');
+      process.exit(1);
+    }
+    write({ ...current, lang: next });
+    process.stdout.write(t(next, 'langSet', next) + '\n');
   } else if (arg === 'on') {
     write({ ...current, mode: 'full' });
-    process.stdout.write('RPG 모드 ON (full)\n');
+    process.stdout.write(t(lang, 'modeOn') + '\n');
   } else if (MODES.includes(arg)) {
     write({ ...current, mode: arg });
-    process.stdout.write(`RPG 모드: ${arg}\n`);
+    process.stdout.write(t(lang, 'modeSet', arg) + '\n');
   } else {
-    process.stdout.write('사용법: rpg-state.js on|off|full|lite|status|reset\n');
+    process.stdout.write(t(lang, 'usage') + '\n');
     process.exit(1);
   }
 }
