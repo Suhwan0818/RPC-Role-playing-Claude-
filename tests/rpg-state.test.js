@@ -46,7 +46,8 @@ assert.strictEqual(loss.leveledUp, false);
 // ── 깨진 상태 파일 복구 ────────────────────────────────────────
 fs.writeFileSync(statePath, '{ 이건 JSON 이 아니다', 'utf8');
 assert.deepStrictEqual(state.read(), {
-  mode: 'full', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 }, updatedAt: null,
+  mode: 'full', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 },
+  projects: {}, updatedAt: null,
 });
 
 fs.writeFileSync(statePath, JSON.stringify({ mode: '이상한모드', xp: 300, level: 99, streak: -5 }));
@@ -63,6 +64,42 @@ assert.strictEqual(reloaded.mode, 'lite');
 assert.strictEqual(reloaded.xp, 420);
 assert.strictEqual(reloaded.level, 3);
 assert.deepStrictEqual(reloaded.progress, { into: 120, span: 300 }, 'statusline 이 쓸 파생값도 저장된다');
+
+// ── 프로젝트 계급 기록 ─────────────────────────────────────────
+const noted = state.withProject({ mode: 'full', xp: 0 }, 'C:/proj/a', { rank: 3, weight: 1 });
+assert.deepStrictEqual(
+  { rank: noted.projects['C:/proj/a'].rank, weight: noted.projects['C:/proj/a'].weight },
+  { rank: 3, weight: 1 }
+);
+assert.ok(!Number.isNaN(Date.parse(noted.projects['C:/proj/a'].at)), 'at 은 ISO 시각');
+
+const bumped = state.withProject(noted, 'C:/proj/a', { rank: 4, weight: 0 });
+assert.strictEqual(bumped.projects['C:/proj/a'].rank, 4, '같은 경로는 덮어쓴다');
+assert.strictEqual(Object.keys(bumped.projects).length, 1);
+
+// 형식이 어긋난 항목은 버린다
+const dirty = state.write({
+  mode: 'full',
+  xp: 0,
+  projects: {
+    'C:/good': { rank: 2, weight: 1, at: '2026-01-01T00:00:00.000Z' },
+    'C:/bad-rank': { rank: 'high', weight: 1 },
+    'C:/bad-shape': 'nope',
+  },
+});
+assert.deepStrictEqual(Object.keys(dirty.projects), ['C:/good'], '깨진 항목은 버린다');
+
+// 20개를 넘으면 최근 것만 남긴다
+let many = { mode: 'full', xp: 0, projects: {} };
+for (let i = 0; i < 25; i += 1) {
+  many.projects['C:/p' + i] = {
+    rank: 1, weight: 0, at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(),
+  };
+}
+const pruned = state.write(many);
+assert.strictEqual(Object.keys(pruned.projects).length, state.MAX_PROJECTS, '20개로 정리');
+assert.ok(pruned.projects['C:/p24'], '가장 최근 것은 남는다');
+assert.ok(!pruned.projects['C:/p0'], '가장 오래된 것은 버려진다');
 
 // ── XP hook 통합: 실제 프로세스에 PostToolUse 페이로드를 흘려본다 ──
 const hook = path.join(__dirname, '..', 'hooks', 'rpg-xp.js');

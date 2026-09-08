@@ -11,3 +11,7 @@ Thumbs.db
 # ruflo 가 자동 생성 — 이 플러그인과 무관
 .claude/proven-config.json
 .claude/.proven-config-version
+
+# ruflo 가 자동 생성 — 이 플러그인과 무관
+.claude/proven-config.json
+.claude/.proven-config-version

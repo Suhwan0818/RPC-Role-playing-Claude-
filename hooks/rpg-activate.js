@@ -9,20 +9,25 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { read, progress } = require('./rpg-state');
+const { read, write, withProject, progress } = require('./rpg-state');
+const { evaluate, card, RANKS } = require('./rpg-scan');
 
 const brief = process.argv.includes('--brief');
 const state = read();
 
 if (state.mode === 'off') process.exit(0);
 
+const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const p = progress(state.xp);
 const statusLine = `Lv.${p.level} · XP ${p.into}/${p.span} · 연속 ${state.streak}`;
 
+// 매 프롬프트마다 도는 경로다. 절대 스캔하지 않는다 — 저장된 계급만 얹는다.
 if (brief) {
+  const known = state.projects[projectRoot];
+  const rankName = known && RANKS[known.rank] ? ` · ${RANKS[known.rank].ko}` : '';
   process.stdout.write(
-    `RPG MODE ACTIVE (${state.mode}) — ${statusLine}. ` +
-      '퀘스트 틀 유지, 기술 내용 원문 보존, 실패는 실패로 보고.'
+    `RPG MODE ACTIVE (${state.mode}) — ${statusLine}${rankName}. ` +
+      '퀘스트 틀 유지, 기술 내용 원문 보존, 실패는 실패로 보고. 도트아트는 넣지 않는다.'
   );
   process.exit(0);
 }
@@ -56,6 +61,29 @@ if (!rules) {
 }
 
 const out = [`RPG MODE ACTIVE — 강도: ${state.mode} · ${statusLine}`, '', rules];
+
+// 프로젝트 측정. 실패해도 세션은 떠야 하므로 통째로 감싼다.
+try {
+  const scan = evaluate(projectRoot);
+  const known = state.projects[projectRoot];
+  out.push('', '## 이번 프로젝트 (측정값 — 이 수치 밖의 것은 지어내지 말 것)', '', card(scan));
+
+  if (known && known.rank !== scan.rank.tier) {
+    const up = scan.rank.tier > known.rank;
+    const from = RANKS[known.rank] ? RANKS[known.rank].ko : '알 수 없음';
+    out.push(
+      '',
+      up
+        ? `승급: ${from} → ${scan.rank.ko}. 이번 세션 첫 응답에서 한 번 언급한다.`
+        : `강등: ${from} → ${scan.rank.ko}. 이유를 위 측정값에서 찾아 한 번 언급한다.`
+    );
+  }
+  out.push('', '도트아트는 이번 세션 첫 응답에서만 쓴다. 이후 응답에는 넣지 않는다.');
+
+  write(withProject(state, projectRoot, { rank: scan.rank.tier, weight: scan.weight.tier }));
+} catch (e) {
+  out.push('', '프로젝트 측정 실패 — 계급·무게는 이번 세션에서 언급하지 않는다.');
+}
 
 // 압축 모드와 동시에 켜져 있으면 우선순위를 명시한다. 안 그러면 두 규칙이 싸운다.
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
