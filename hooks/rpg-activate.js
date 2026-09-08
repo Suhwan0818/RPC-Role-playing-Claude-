@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { read, write, withProject, progress } = require('./rpg-state');
+const { read, write, withProject, startSession, progress } = require('./rpg-state');
 const { evaluate, card, RANKS } = require('./rpg-scan');
 
 const brief = process.argv.includes('--brief');
@@ -62,6 +62,11 @@ if (!rules) {
 
 const out = [`RPG MODE ACTIVE — 강도: ${state.mode} · ${statusLine}`, '', rules];
 
+// 이번 세션의 XP 기준선을 먼저 잡는다. 측정이 실패해도 세션 요약은 남아야 한다.
+// ponytail: compact/clear 로 SessionStart 가 다시 돌면 기준선도 다시 잡힌다 —
+// 그 전에 번 XP 는 요약에서 빠진다. 세션 id 를 물고 늘어질 만한 값은 아니다.
+let next = startSession(state);
+
 // 프로젝트 측정. 실패해도 세션은 떠야 하므로 통째로 감싼다.
 try {
   const scan = evaluate(projectRoot);
@@ -80,10 +85,25 @@ try {
   }
   out.push('', '도트아트는 이번 세션 첫 응답에서만 쓴다. 이후 응답에는 넣지 않는다.');
 
-  write(withProject(state, projectRoot, { rank: scan.rank.tier, weight: scan.weight.tier }));
+  next = withProject(next, projectRoot, { rank: scan.rank.tier, weight: scan.weight.tier });
 } catch (e) {
   out.push('', '프로젝트 측정 실패 — 계급·무게는 이번 세션에서 언급하지 않는다.');
 }
+
+// 지난 원정. 아무것도 못 번 세션 뒤에는 lastSession 이 비어 있어 이 줄이 없다.
+// 한 번 보여준 기록은 지운다 — compact 로 SessionStart 가 또 돌아도 두 번 나오지 않는다.
+if (state.lastSession) {
+  const s = state.lastSession;
+  const levels = s.toLevel > s.fromLevel ? ` · Lv.${s.fromLevel} → Lv.${s.toLevel}` : '';
+  out.push(
+    '',
+    `지난 원정: XP +${s.gained}${levels} · 연속 ${s.streak}. ` +
+      '이번 세션 첫 응답에서 한 줄로만 언급한다.'
+  );
+  next = { ...next, lastSession: null };
+}
+
+write(next);
 
 // 압축 모드와 동시에 켜져 있으면 우선순위를 명시한다. 안 그러면 두 규칙이 싸운다.
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');

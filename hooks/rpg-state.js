@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // rpg-mode — 상태 저장소 + 레벨 계산. 모듈이자 CLI.
 //
-//   require('./rpg-state')  → { read, write, award, progress, STATE_PATH }
+//   require('./rpg-state')  → { read, write, award, startSession, endSession, progress, ... }
 //   node rpg-state.js on|off|full|lite|status|reset
 
 const fs = require('fs');
@@ -24,6 +24,8 @@ const DEFAULT_STATE = Object.freeze({
   streak: 0,
   progress: Object.freeze({ into: 0, span: XP_PER_LEVEL }),
   projects: Object.freeze({}),
+  session: null,
+  lastSession: null,
   updatedAt: null,
 });
 
@@ -64,6 +66,39 @@ function normalizeProjects(raw) {
   return Object.fromEntries(kept);
 }
 
+/**
+ * 이번 세션의 XP 기준선. 형식이 어긋나면 null — 기준선이 없으면 요약을 만들지 않는다.
+ * startLevel 은 저장값을 믿지 않고 startXp 에서 재계산한다 (level 과 같은 원칙).
+ */
+function normalizeSession(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!Number.isFinite(raw.startXp) || raw.startXp < 0) return null;
+  const startXp = Math.floor(raw.startXp);
+  return {
+    startXp,
+    startLevel: levelFor(startXp),
+    startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : null,
+  };
+}
+
+/**
+ * 직전 세션의 결과. 획득이 0 이하면 null — 보여줄 것이 없는데 카드를 띄우지 않는다.
+ * (아무것도 안 한 세션을 축하하는 건 이 플러그인이 금지하는 지어내기다.)
+ */
+function normalizeLastSession(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (!Number.isFinite(raw.gained) || raw.gained <= 0) return null;
+  const fromLevel = Number.isInteger(raw.fromLevel) && raw.fromLevel >= 1 ? raw.fromLevel : 1;
+  const toLevel = Number.isInteger(raw.toLevel) && raw.toLevel >= fromLevel ? raw.toLevel : fromLevel;
+  return {
+    gained: Math.floor(raw.gained),
+    fromLevel,
+    toLevel,
+    streak: Number.isFinite(raw.streak) && raw.streak >= 0 ? Math.floor(raw.streak) : 0,
+    endedAt: typeof raw.endedAt === 'string' ? raw.endedAt : null,
+  };
+}
+
 function normalize(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const xp = Number.isFinite(src.xp) && src.xp >= 0 ? Math.floor(src.xp) : 0;
@@ -75,8 +110,47 @@ function normalize(raw) {
     // 표시용 파생값. statusline 이 레벨 공식을 다시 구현하지 않도록 여기서 계산해 저장한다.
     progress: (({ into, span }) => ({ into, span }))(progress(xp)),
     projects: normalizeProjects(src.projects),
+    session: normalizeSession(src.session),
+    lastSession: normalizeLastSession(src.lastSession),
     updatedAt: typeof src.updatedAt === 'string' ? src.updatedAt : null,
   };
+}
+
+/**
+ * 이번 세션의 기준선을 현재 XP 로 새로 잡는다 (입력 변형 없음).
+ * SessionStart 에서 부른다. 직전 세션 기록(lastSession)은 건드리지 않는다 —
+ * 그 줄을 보여주는 건 같은 SessionStart 의 몫이다.
+ */
+function startSession(state) {
+  const before = normalize(state);
+  return normalize({
+    ...before,
+    session: { startXp: before.xp, startedAt: new Date().toISOString() },
+  });
+}
+
+/**
+ * 세션을 닫는다 (입력 변형 없음). 기준선 이후 번 XP 를 lastSession 에 남기고 기준선을 비운다.
+ * 기준선이 없으면 현재 XP 를 기준으로 삼아 획득 0 이 되고, 획득이 0 이면 기록도 남기지 않는다.
+ */
+function endSession(state) {
+  const before = normalize(state);
+  const startXp = before.session ? before.session.startXp : before.xp;
+  const gained = before.xp - startXp;
+  return normalize({
+    ...before,
+    session: null,
+    lastSession:
+      gained > 0
+        ? {
+            gained,
+            fromLevel: levelFor(startXp),
+            toLevel: before.level,
+            streak: before.streak,
+            endedAt: new Date().toISOString(),
+          }
+        : null,
+  });
 }
 
 /**
@@ -132,7 +206,7 @@ function award(state, { xp = 0, success = true } = {}) {
 }
 
 module.exports = {
-  read, write, award, withProject, progress, levelFor,
+  read, write, award, withProject, startSession, endSession, progress, levelFor,
   STATE_PATH, MODES, XP_PER_LEVEL, MAX_PROJECTS,
 };
 

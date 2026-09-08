@@ -38,6 +38,20 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/rpg-summary.js\"",
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT/hooks/rpg-summary.js\" }",
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

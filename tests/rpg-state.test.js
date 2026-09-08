@@ -45,7 +45,7 @@ assert.strictEqual(loss.leveledUp, false);
 fs.writeFileSync(statePath, '{ 이건 JSON 이 아니다', 'utf8');
 assert.deepStrictEqual(state.read(), {
   mode: 'full', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 },
-  projects: {}, updatedAt: null,
+  projects: {}, session: null, lastSession: null, updatedAt: null,
 });
 
 fs.writeFileSync(statePath, JSON.stringify({ mode: '이상한모드', xp: 300, level: 99, streak: -5 }));
@@ -98,5 +98,48 @@ const pruned = state.write(many);
 assert.strictEqual(Object.keys(pruned.projects).length, state.MAX_PROJECTS, '20개로 정리');
 assert.ok(pruned.projects['C:/p24'], '가장 최근 것은 남는다');
 assert.ok(!pruned.projects['C:/p0'], '가장 오래된 것은 버려진다');
+
+// ── 세션 기준선과 요약 ─────────────────────────────────────────
+const opened = state.startSession({ mode: 'full', xp: 120, streak: 2 });
+assert.strictEqual(opened.session.startXp, 120, '기준선은 현재 XP');
+assert.strictEqual(opened.session.startLevel, 2, 'startLevel 은 startXp 에서 재계산');
+assert.ok(!Number.isNaN(Date.parse(opened.session.startedAt)), 'startedAt 은 ISO 시각');
+
+const closed = state.endSession({ ...opened, xp: 320, streak: 6 });
+assert.strictEqual(closed.session, null, '닫으면 기준선을 비운다');
+assert.deepStrictEqual(
+  {
+    gained: closed.lastSession.gained,
+    from: closed.lastSession.fromLevel,
+    to: closed.lastSession.toLevel,
+  },
+  { gained: 200, from: 2, to: 3 },
+  '획득량과 레벨 변화를 기록한다'
+);
+assert.strictEqual(closed.lastSession.streak, 6);
+
+// 아무것도 못 번 세션은 기록을 남기지 않는다 — 지어낸 축하 금지
+const quiet = state.endSession({ ...opened, xp: 120 });
+assert.strictEqual(quiet.lastSession, null, '획득 0 이면 lastSession 없음');
+assert.strictEqual(quiet.session, null);
+
+// 기준선 없이 닫아도 터지지 않는다 (상태 파일이 막 생긴 경우)
+assert.strictEqual(state.endSession({ mode: 'full', xp: 50 }).lastSession, null);
+
+// 깨진 값은 버린다
+const junk = state.write({
+  mode: 'full',
+  xp: 0,
+  session: { startXp: '많이' },
+  lastSession: { gained: -5 },
+});
+assert.strictEqual(junk.session, null, '숫자가 아닌 기준선은 버린다');
+assert.strictEqual(junk.lastSession, null, '음수 획득은 버린다');
+
+// 입력 변형 없음
+const src = { mode: 'full', xp: 10, streak: 1 };
+state.startSession(src);
+state.endSession(src);
+assert.deepStrictEqual(src, { mode: 'full', xp: 10, streak: 1 }, '입력 객체는 변형되지 않는다');
 
 fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -56,5 +56,27 @@ runHook({ tool_name: 'Edit', tool_input: {}, tool_response: {} });
 assert.strictEqual(state.read().xp, 135, 'off 모드는 XP 를 주지 않는다');
 
 
+// ── SessionEnd 훅: 실제 프로세스로 세션을 닫아본다 ────────────────
+const summaryHook = path.join(__dirname, '..', 'hooks', 'rpg-summary.js');
+const runSummary = () =>
+  execFileSync(process.execPath, [summaryHook], { input: '{}', env, encoding: 'utf8' });
+
+state.write({ ...state.startSession({ mode: 'full', xp: 120 }), xp: 320, streak: 6 });
+runSummary();
+const summarized = state.read();
+assert.strictEqual(summarized.session, null, '세션을 닫으면 기준선이 비워진다');
+assert.strictEqual(summarized.lastSession.gained, 200, '기준선 이후 번 XP 를 기록한다');
+assert.strictEqual(summarized.lastSession.toLevel, 3);
+
+// 아무것도 못 번 세션은 기록을 남기지 않는다
+state.write(state.startSession({ mode: 'full', xp: 320 }));
+runSummary();
+assert.strictEqual(state.read().lastSession, null, '획득 0 이면 기록 없음');
+
+// off 모드에서는 아무것도 하지 않는다
+state.write({ mode: 'off', xp: 320, session: { startXp: 100 } });
+runSummary();
+assert.ok(state.read().session, 'off 모드는 세션을 닫지 않는다');
+
 fs.rmSync(tmpDir, { recursive: true, force: true });
 console.log('rpg-xp 점검 통과 ✅');
