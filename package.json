@@ -1,0 +1,13 @@
+{
+  "name": "rpg-mode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code 응답을 RPG 게임처럼. 퀘스트/전투 서술 + 실제 XP·레벨 누적.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node tests/rpg-state.test.js && node tests/rpg-scan.test.js && node tests/rpg-xp.test.js"
+  }
+}
