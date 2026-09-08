@@ -56,6 +56,34 @@ runHook({ tool_name: 'Edit', tool_input: {}, tool_response: {} });
 assert.strictEqual(state.read().xp, 135, 'off 모드는 XP 를 주지 않는다');
 
 
+// ── 확장 XP 신호: 성공하면 주고, 실패하면 안 준다 ─────────────────
+const signals = [
+  ['cargo clippy', 10, 'lint'],
+  ['npm run build', 15, '빌드'],
+  ['git push -u origin main', 20, '푸시'],
+  ['gh pr create --fill', 40, 'PR 생성'],
+];
+
+for (const [cmd, expected, label] of signals) {
+  state.write({ mode: 'full', xp: 0, streak: 0 });
+  runHook({ tool_name: 'Bash', tool_input: { command: cmd }, tool_response: { stdout: 'ok' } });
+  assert.strictEqual(state.read().xp, expected, `${label} 성공은 +${expected}`);
+
+  runHook({
+    tool_name: 'Bash',
+    tool_input: { command: cmd },
+    tool_response: { is_error: true, stdout: 'failed' },
+  });
+  const after = state.read();
+  assert.strictEqual(after.xp, expected, `${label} 실패는 XP 를 주지 않는다`);
+  assert.strictEqual(after.streak, 0, `${label} 실패는 연속을 끊는다`);
+}
+
+// 순서 규칙: npm run build 가 테스트 패턴에 먼저 걸리면 안 된다
+state.write({ mode: 'full', xp: 0, streak: 0 });
+runHook({ tool_name: 'Bash', tool_input: { command: 'npm run build' }, tool_response: { stdout: 'ok' } });
+assert.strictEqual(state.read().xp, 15, 'npm run build 는 빌드(15)지 테스트(25)가 아니다');
+
 // ── SessionEnd 훅: 실제 프로세스로 세션을 닫아본다 ────────────────
 const summaryHook = path.join(__dirname, '..', 'hooks', 'rpg-summary.js');
 const runSummary = () =>

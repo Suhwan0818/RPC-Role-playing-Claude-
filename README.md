@@ -129,9 +129,16 @@ node hooks/rpg-scan.js [경로]   # 카드를 직접 찍어본다
 | 이벤트 | XP |
 |--------|-----|
 | 파일 편집 성공 (Edit/Write/MultiEdit) | +10 |
-| 테스트 통과 (pytest, jest, vitest, npm test, go test, cargo test …) | +25 |
+| lint 통과 (`eslint`, `ruff`, `cargo clippy`, `golangci-lint`, `npm run lint` …) | +10 |
+| 빌드 통과 (`npm run build`, `tsc`, `cargo build`, `go build`, `mvn package` …) | +15 |
+| 푸시 성공 (`git push`) | +20 |
+| 테스트 통과 (`pytest`, `jest`, `vitest`, `npm test`, `go test`, `cargo test` …) | +25 |
+| PR 생성 (`gh pr create`) | +40 |
 | 커밋 성공 (`git commit`) | +50 |
 | 실패 | 0 — 감점은 없고 연속 카운트만 끊긴다 |
+
+Bash 명령은 위 표 순서대로 **먼저 맞는 것 하나만** 센다. `npm run build` 가 테스트로
+잘못 잡히지 않도록 빌드를 테스트보다 앞에 두었다.
 
 레벨 곡선: 레벨 n → n+1 에 `100 × n` XP. Lv2=100, Lv3=300, Lv4=600 …
 
