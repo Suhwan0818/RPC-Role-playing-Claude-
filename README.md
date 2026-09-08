@@ -19,15 +19,15 @@ statusline: `Lv.3 ███░░░░░ 120/300 *4`
 ```
    ░░███░░
    ░░▒█▒░░
-   ░▒████▓     계급: 모험가 (Adventurer) · 점수 42/100
-   ░░█░█▓░     규모: 파일 11 · 30KB · 테스트 1 · 커밋 1 · TODO 0
-   ░░▒░▒░░     장비 무게: 가벼움 (지수 0, 평균 3KB/파일)
+   ░▒████▓     계급: 모험가 (Adventurer) · 점수 52/100
+   ░░█░█▓░     규모: 파일 12 · 57KB · 테스트 2 · 커밋 3 · TODO 17
+   ░░▒░▒░░     장비 무게: 적당 (지수 15, 평균 5KB/파일)
 ```
 
 ## 설치
 
 ```
-/plugin marketplace add "C:\Users\tnghk\OneDrive\바탕 화면\개발중\RPG"
+/plugin marketplace add Suhwan0818/RPC-Role-playing-Claude-
 /plugin install rpg-mode@rpg-mode
 ```
 
@@ -36,10 +36,10 @@ statusline 표시는 별도다 — `~/.claude/statusline.js` 에 `rpgSegment()` 
 
 ## 알려진 표시 문제
 
-`claude plugin list` 가 이 플러그인을 `failed to load` 로 표시할 수 있다. 실제로는 정상이다 —
+**로컬 directory 마켓플레이스로 설치했을 때만** 해당한다 (`/plugin marketplace add <로컬 경로>`).
+`claude plugin list` 가 이 플러그인을 `failed to load` 로 표시할 수 있는데 실제로는 정상이다 —
 `claude plugin details rpg-mode` 는 Hooks (3) 을 보여주고, 새 세션에서 규칙 주입과 XP 지급이
-모두 동작하는 것을 확인했다. 소스가 OneDrive/한글 경로의 directory 마켓플레이스일 때 나오는
-표시 문제로 보인다.
+모두 동작하는 것을 확인했다. 소스가 OneDrive/한글 경로일 때 나오는 표시 문제로 보인다.
 
 ## 사용
 
@@ -121,8 +121,11 @@ hooks/rpg-scan.js              프로젝트 계급·장비 무게 측정 + 도�
 hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입
 hooks/rpg-xp.js                XP 지급, 레벨업 알림
 skills/rpg/SKILL.md            서술 규칙 원본 — 여기만 고치면 된다
-tests/rpg-state.test.js        node tests/rpg-state.test.js
-tests/rpg-scan.test.js         node tests/rpg-scan.test.js
+tests/rpg-state.test.js        상태 저장 · 레벨 곡선 · 프로젝트 기록
+tests/rpg-scan.test.js         계급 · 장비 무게 경계값
+tests/rpg-xp.test.js           XP 지급 hook 통합 (실제 프로세스에 페이로드를 흘린다)
+package.json                   npm test 진입점 (의존성 0개)
+.github/workflows/test.yml     CI — ubuntu · windows 매트릭스
 ```
 
 상태 파일: `~/.claude/.rpg-state.json`
@@ -141,6 +144,16 @@ tests/rpg-scan.test.js         node tests/rpg-scan.test.js
 ## 테스트
 
 ```bash
+npm test          # 세 스위트 전부. 하나라도 실패하면 exit 1
+```
+
+개별 실행:
+
+```bash
 node tests/rpg-state.test.js
 node tests/rpg-scan.test.js
+node tests/rpg-xp.test.js
 ```
+
+프레임워크 없음 — `assert` 와 종료 코드뿐이다. CI 는 ubuntu·windows 양쪽에서 `npm test` 를
+돌린다. Windows 를 빼면 `commandWindows` 분기와 경로 구분자 처리를 검증하지 못한다.
