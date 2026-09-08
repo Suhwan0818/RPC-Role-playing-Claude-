@@ -142,4 +142,25 @@ state.startSession(src);
 state.endSession(src);
 assert.deepStrictEqual(src, { mode: 'full', xp: 10, streak: 1 }, '입력 객체는 변형되지 않는다');
 
+// ── statusline 세그먼트 ────────────────────────────────────────
+const { rpgSegment } = require('../hooks/rpg-statusline');
+
+state.write({ mode: 'full', xp: 420, streak: 4 });
+assert.strictEqual(
+  rpgSegment({ plain: true }),
+  'Lv.3 ███░░░░░ 120/300 *4',
+  '저장된 progress 를 그대로 쓴다 — 레벨 공식을 다시 구현하지 않는다'
+);
+assert.ok(/\x1b\[/.test(rpgSegment()), '기본은 ANSI 색을 넣는다');
+
+state.write({ mode: 'full', xp: 0, streak: 1 });
+assert.strictEqual(rpgSegment({ plain: true }), 'Lv.1 ░░░░░░░░ 0/100', '연속 1 은 표시하지 않는다');
+
+state.write({ mode: 'off', xp: 420, streak: 4 });
+assert.strictEqual(rpgSegment(), null, 'off 면 아무것도 그리지 않는다');
+
+fs.writeFileSync(statePath, '깨진 파일', 'utf8');
+assert.strictEqual(rpgSegment(), null, '상태 파일이 깨져도 statusline 을 죽이지 않는다');
+
 fs.rmSync(tmpDir, { recursive: true, force: true });
+console.log('모든 점검 통과 ✅');

@@ -31,8 +31,33 @@ statusline: `Lv.3 ███░░░░░ 120/300 *4`
 /plugin install rpg-mode@rpg-mode
 ```
 
-statusline 표시는 별도다 — `~/.claude/statusline.js` 에 `rpgSegment()` 가 이미 들어가 있다.
-(상태 파일이 없거나 `off` 면 아무것도 그리지 않으므로 기존 statusline 동작은 그대로다.)
+## statusline
+
+`Lv.3 ███░░░░░ 120/300 *4` 세그먼트는 `hooks/rpg-statusline.js` 가 그린다. 배선은 두 가지.
+
+**statusline 이 아직 없다면** — `~/.claude/settings.json` 에 바로 건다:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node ~/.claude/plugins/marketplaces/rpg-mode/hooks/rpg-statusline.js"
+  }
+}
+```
+
+**이미 자기 statusline 이 있다면** — `settings.json` 은 `statusLine` 을 하나만 받으므로
+기존 스크립트에서 `require` 해 붙인다. 사본을 만들지 않아야 낡지 않는다:
+
+```js
+const { rpgSegment } = require('/절대/경로/rpg-mode/hooks/rpg-statusline.js');
+
+const rpg = rpgSegment();      // 색 없는 버전은 rpgSegment({ plain: true })
+if (rpg) parts.push(rpg);
+```
+
+상태 파일이 없거나 `off` 면 `null` 을 돌려주므로 기존 statusline 동작은 그대로다.
+파일이 깨져 있어도 `null` 이다 — statusline 이 이것 때문에 죽지 않는다.
 
 ## 알려진 표시 문제
 
@@ -118,8 +143,10 @@ node hooks/rpg-scan.js [경로]   # 카드를 직접 찍어본다
 hooks/hooks.json               SessionStart / UserPromptSubmit / PostToolUse 배선
 hooks/rpg-state.js             상태 저장 + 레벨 계산 (모듈 겸 CLI)
 hooks/rpg-scan.js              프로젝트 계급·장비 무게 측정 + 도트아트 (모듈 겸 CLI)
-hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입
+hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입 + 지난 원정 표시
 hooks/rpg-xp.js                XP 지급, 레벨업 알림
+hooks/rpg-summary.js           SessionEnd — 이번 세션 획득량 기록
+hooks/rpg-statusline.js        statusline 세그먼트 (모듈 겸 CLI)
 skills/rpg/SKILL.md            서술 규칙 원본 — 여기만 고치면 된다
 tests/rpg-state.test.js        상태 저장 · 레벨 곡선 · 프로젝트 기록
 tests/rpg-scan.test.js         계급 · 장비 무게 경계값
