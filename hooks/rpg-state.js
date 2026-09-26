@@ -16,7 +16,9 @@ const {
   signalFor, bossKey, nextBoss, appendLog, bumpCounts, newlyUnlocked,
   normalizeCounts, normalizeBest, normalizeAchievements, normalizeBoss, normalizeLog,
   ACHIEVEMENTS, achievementName,
+  bossBonus, BOSS_BONUS_CAP,
 } = require('./rpg-progress');
+const { meter, progressMeter, spark, BOSS_ART } = require('./rpg-dots');
 
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const STATE_PATH = path.join(claudeDir, '.rpg-state.json');
@@ -313,12 +315,19 @@ if (require.main === module) {
   if (arg === 'status') {
     const p = progress(current.xp);
     process.stdout.write(
-      `${t(lang, 'mode')}: ${current.mode} | Lv.${p.level} | ` +
-        `XP ${p.into}/${p.span} (${t(lang, 'total')} ${current.xp}) | ` +
+      `${t(lang, 'mode')}: ${current.mode} | Lv.${p.level} ${meter(p.into / p.span)} ` +
+        `${p.into}/${p.span} (${t(lang, 'total')} ${current.xp}) | ` +
         `${t(lang, 'streak')} ${current.streak}\n`
     );
+    // 살아 있는 보스가 있을 때만 스프라이트를 그린다. 없는 전투를 연출하지 않는다.
     if (current.boss) {
-      process.stdout.write(t(lang, 'bossActive', current.boss.cmd, current.boss.fails) + '\n');
+      const bonus = bossBonus(current.boss.fails);
+      const side = [
+        t(lang, 'bossActive', current.boss.cmd, current.boss.fails),
+        `${t(lang, 'bossBonusAt', bonus)}  ${meter(bonus / BOSS_BONUS_CAP)}`,
+        '',
+      ];
+      BOSS_ART.forEach((row, i) => process.stdout.write(`   ${row}  ${side[i] || ''}\n`.trimEnd() + '\n'));
     }
     // 현재 프로젝트 카드도 같이. 스캔은 여기서만 필요하므로 이 시점에 불러온다.
     try {
@@ -333,25 +342,34 @@ if (require.main === module) {
     if (!current.log.length) {
       process.stdout.write(t(lang, 'logEmpty') + '\n');
     } else {
-      process.stdout.write(t(lang, 'logHeader', current.log.length) + '\n');
-      for (const e of [...current.log].reverse()) {
+      // 스파크라인은 오래된 것부터, 목록은 최신부터. 같은 높이 배열을 나눠 쓴다.
+      const marks = spark(current.log.map((e) => e.xp));
+      process.stdout.write(`${t(lang, 'logHeader', current.log.length)}  ${marks}\n`);
+      const rows = [];
+      current.log.forEach((e, i) => {
         const time = e.at ? new Date(e.at).toTimeString().slice(0, 5) : '--:--';
         const xp = e.xp > 0 ? '+' + e.xp : '0';
-        process.stdout.write(
-          `${time}  ${e.ok ? '✓' : '✗'} ${e.tool.padEnd(6)} ${(e.signal || '-').padEnd(7)} ${xp.padStart(4)}\n`
-        );
-      }
+        const line =
+          `${time}  ${e.ok ? '✓' : '✗'} ${e.tool.padEnd(6)} ` +
+          `${(e.signal || '-').padEnd(7)} ${xp.padStart(4)}  ${marks[i] || ''}`;
+        rows.push(line);
+      });
+      rows.reverse().forEach((line) => process.stdout.write(line + '\n'));
     }
   } else if (arg === 'achievements' || arg === 'ach') {
     const unlocked = new Set(current.achievements);
-    process.stdout.write(t(lang, 'achHeader', unlocked.size, ACHIEVEMENTS.length) + '\n');
+    process.stdout.write(
+      `${t(lang, 'achHeader', unlocked.size, ACHIEVEMENTS.length)}  ` +
+        `${progressMeter(unlocked.size, ACHIEVEMENTS.length)}\n`
+    );
     for (const a of ACHIEVEMENTS) {
       const [have, need] = a.at(current);
       const name = achievementName(lang, a.id);
       process.stdout.write(
         unlocked.has(a.id)
           ? `  ✓ ${name}\n`
-          : `  · ${name} — ${t(lang, 'achLocked', Math.min(have, need), need)}\n`
+          : `  · ${name} — ${progressMeter(have, need)} ` +
+            `${t(lang, 'achLocked', Math.min(have, need), need)}\n`
       );
     }
   } else if (arg === 'reset') {

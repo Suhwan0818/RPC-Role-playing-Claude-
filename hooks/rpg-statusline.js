@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const BAR_WIDTH = 8;
+const { meter, FULL, METER_WIDTH } = require('./rpg-dots');
 const LEVEL_COLOR = 213; // 분홍
 const STREAK_COLOR = 208; // 주황
 
@@ -21,13 +21,11 @@ const reset = `${ESC}[0m`;
 const dim = (s) => `${ESC}[38;5;244m${s}${reset}`;
 const color = (s, code) => `${ESC}[38;5;${code}m${s}${reset}`;
 
-function filledCount(pct) {
-  return Math.round((pct / 100) * BAR_WIDTH);
-}
-
-function bar(pct, code) {
-  const filled = filledCount(pct);
-  return color('█'.repeat(filled), code) + dim('░'.repeat(BAR_WIDTH - filled));
+/** 채운 칸만 색을 입힌다. 칸 계산은 rpg-dots 가 하나만 갖는다. */
+function bar(ratio, code) {
+  const cells = meter(ratio, METER_WIDTH);
+  const filled = cells.lastIndexOf(FULL) + 1;
+  return color(cells.slice(0, filled), code) + dim(cells.slice(filled));
 }
 
 /**
@@ -48,19 +46,17 @@ function rpgSegment({ plain = false } = {}) {
 
     const into = (st.progress && st.progress.into) || 0;
     const span = (st.progress && st.progress.span) || 100;
-    const pct = Math.min(100, Math.round((into / span) * 100));
+    const ratio = span > 0 ? into / span : 0;
     const level = st.level || 1;
     const streak = st.streak > 1 ? '*' + st.streak : '';
 
     if (plain) {
-      const filled = filledCount(pct);
-      const meter = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
-      return `Lv.${level} ${meter} ${into}/${span}${streak ? ' ' + streak : ''}`;
+      return `Lv.${level} ${meter(ratio)} ${into}/${span}${streak ? ' ' + streak : ''}`;
     }
 
     return (
       color('Lv.' + level, LEVEL_COLOR) +
-      ' ' + bar(pct, LEVEL_COLOR) +
+      ' ' + bar(ratio, LEVEL_COLOR) +
       ' ' + dim(into + '/' + span) +
       (streak ? ' ' + color(streak, STREAK_COLOR) : '')
     );

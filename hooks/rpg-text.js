@@ -101,6 +101,7 @@ const STRINGS = {
     achHeader: (have, total) => `업적 ${have}/${total}`,
     achLocked: (have, need) => `${have}/${need}`,
     bossActive: (cmd, fails) => `보스: \`${cmd}\` — 연속 실패 ${fails}회`,
+    bossBonusAt: (bonus) => `격파 보너스 +${bonus}`,
 
     // ── PostToolUse 알림 ──
     levelUp: (from, to, total) =>
@@ -191,6 +192,7 @@ const STRINGS = {
     achHeader: (have, total) => `Achievements ${have}/${total}`,
     achLocked: (have, need) => `${have}/${need}`,
     bossActive: (cmd, fails) => `Boss: \`${cmd}\` — ${fails} consecutive failures`,
+    bossBonusAt: (bonus) => `Slay bonus +${bonus}`,
 
     // ── PostToolUse notice ──
     levelUp: (from, to, total) =>

@@ -31,6 +31,23 @@ rpg-xp → rpg-state → rpg-progress → rpg-text
   PowerShell 경로에도 슬래시를 쓴다 — 역슬래시는 JSON 이스케이프 사고를 부른다.
 - PostToolUse 는 XP 가 0 이고 연속도 안 변하면 파일을 건드리지 않는다. 디스크 낭비 금지.
 
+## 도트 그래픽은 한 곳에서만 그린다
+
+막대·스파크라인·스프라이트는 `hooks/rpg-dots.js` 뿐이다. statusline 이 자기 막대를 따로
+구현하고 있었고, CLI 에 막대를 더 넣으면 세 군데가 된다 — 폭이나 반올림이 어긋나면
+같은 XP 가 화면마다 다르게 보인다. `rpg-dots` 는 의존이 없으므로 매 렌더마다 도는
+statusline 도 안심하고 쓴다.
+
+Block Elements 범위 문자만 쓴다 (`░▒▓█▁▂▃▄▅▆▇▀▄`). 폭이 애매한 문자는 터미널에서
+깨지고 줄이 어긋난다. 이모지는 넣지 않는다.
+
+막대 길이는 측정값 비율에서만 나온다. 범위를 벗어난 값은 폭까지 자른다 — 폭보다 긴
+막대는 거짓말이다. 값이 없으면 빈 막대이고, 스파크라인은 빈 문자열이다 (한 칸도 지어내지
+않는다). 실패(XP 0)는 가장 낮은 칸으로 남긴다: 빈칸으로 두면 실패가 화면에서 지워진다.
+
+보스 스프라이트는 **살아 있는 보스가 있을 때만** 그린다. 계급 아트와 같은 규칙이다 —
+없는 전투를 연출하지 않는다.
+
 ## 신호는 명령을 세는 것이지 문자열을 찾는 것이 아니다
 
 `BASH_SIGNALS` 를 명령어 전체에 그대로 대면 안 된다. heredoc 본문에 `git commit` 을
@@ -109,10 +126,11 @@ normalize 헬퍼를 거친다. `log` 는 20건 링 버퍼 — 상한을 늘리�
 
 ```bash
 node tests/rpg-state.test.js      # 프레임워크 없음. 실패하면 exit 1
+node tests/rpg-dots.test.js       # 막대·스파크라인 경계값
 node tests/rpg-progress.test.js   # 신호표·보스·업적 경계값
 node tests/rpg-scan.test.js       # 계급·무게 경계값
 node tests/rpg-xp.test.js         # 훅 통합 (실제 프로세스에 페이로드를 흘린다)
-npm test                          # 위 네 개 전부
+npm test                          # 위 다섯 개 전부
 ```
 
 hook 을 만졌으면 실제로 다시 설치해서 확인한다. `claude plugin details rpg-mode` 가

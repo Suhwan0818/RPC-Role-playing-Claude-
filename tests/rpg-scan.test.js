@@ -132,8 +132,9 @@ assert.ok(text.includes('계급:'), '카드에 계급이 있다');
 assert.ok(text.includes('장비 무게:'), '카드에 무게가 있다');
 assert.ok(text.includes('fat'), '무거우면 어떤 파일이 무거운지 이름을 댄다');
 assert.ok(text.includes('상한: 장비 과중'), '상한 이유가 카드에 보인다');
-assert.ok(/[░▒▓█]/.test(text), '기본은 아트 포함');
-assert.ok(!/[░▒▓█]/.test(card(heavy, { art: false })), 'art:false 면 아트를 뺀다');
+// 막대도 블록 문자를 쓰므로 '블록이 있냐' 로는 못 가린다 — 아트 줄로 가린다
+assert.ok(text.startsWith('   ░'), '기본은 아트 줄로 시작한다');
+assert.ok(card(heavy, { art: false }).startsWith('계급:'), 'art:false 면 아트 줄이 없다');
 assert.ok(card(empty).includes('TODO 미측정'), 'git 이 아니면 미측정이라고 쓴다');
 
 // ── 영어 카드 ────────────────────────────────────────────────────
@@ -203,6 +204,16 @@ assert.ok(
 const gearEn = card(withTests, { art: false, lang: 'en' });
 assert.ok(gearEn.includes('Gear: helmet README'), '슬롯도 영어로');
 assert.ok(/Next rank: [0-9-]+ points to /.test(gearEn));
+
+
+// ── 카드에 도트 막대가 붙는다 ────────────────────────────────────
+const metered = card(withTests, { art: false });
+assert.ok(/점수 [0-9]+\/100 [░█]{8}/.test(metered), '점수 옆에 막대');
+assert.ok(/장비 무게: \S+ [░█]{8} \(/.test(metered), '무게 옆에 막대');
+assert.ok(/score [0-9]+\/100 [░█]{8}/.test(card(withTests, { art: false, lang: 'en' })));
+
+// 막대가 게이트 문구를 밀어내지 않는다
+assert.ok(card(heavy, { art: false }).includes('상한: 장비 과중'), '상한 이유는 그대로 보인다');
 
 // ── 계급 이름은 한 함수에서만 나온다 (카드와 --brief 가 갈라지지 않게) ──
 assert.strictEqual(rankName('ko', 5), '성기사 (Paladin)');

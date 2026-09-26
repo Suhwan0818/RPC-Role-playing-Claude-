@@ -142,6 +142,46 @@ if (rpg) parts.push(rpg);
 node hooks/rpg-scan.js [경로]   # 카드를 직접 찍어본다
 ```
 
+## 도트 그래픽
+
+막대·스파크라인·스프라이트는 `hooks/rpg-dots.js` 한 곳에서 나온다. Block Elements 문자만
+쓴다 — 폭이 애매한 문자는 터미널에서 깨진다. 막대 길이는 측정값 비율에서만 나오고,
+범위를 벗어난 값은 폭까지 잘린다 (폭보다 긴 막대는 거짓말이다).
+
+```
+$ /rpg status
+모드: full | Lv.8 ██░░░░░░ 220/800 (누적 2820) | 연속 113
+   ░▄███▄░  보스: `npm test` — 연속 실패 6회
+   ▓█▒█▒█▓  격파 보너스 +30  █████░░░
+   ░▀█▀█▀░
+   ░░▓█▓░░
+   ░░▓▓▓░░
+   ░▓████▓   계급: 성기사 (Paladin) · 점수 77/100 ██████░░
+   ░▓███▓░   규모: 파일 21 · 137KB · 테스트 5 · 커밋 16 · TODO 19
+   ░░█░█░░   장비 무게: 적당 ██░░░░░░ (지수 25, 평균 7KB/파일)
+```
+
+보스 스프라이트는 **살아 있는 보스가 있을 때만** 그린다. 없는 전투를 연출하지 않는다.
+
+```
+$ /rpg log
+전투 기록 (최근 16건)  ▅▅▇▅▇▅▅█▅▅▅█▅▅█▅
+19:12  ✓ Bash   test     +25  ▅
+19:10  ✓ Bash   commit   +50  █
+19:07  ✗ Bash   test       0  ▁
+```
+
+스파크라인은 가장 큰 XP 가 `█` 이 되는 상대 높이다. 실패(0)는 가장 낮은 칸(`▁`)으로
+남는다 — 빈칸으로 두면 실패가 지워진다.
+
+```
+$ /rpg achievements
+업적 5/11  ████░░░░
+  ✓ 첫 피
+  · 백련 — █░░░░░░░ 11/100
+  · 베테랑 — ██████░░ 7/10
+```
+
 ## 업적 · 보스전 · 전투 기록
 
 전부 실제 카운터에서 나온다. 조건과 진행도가 같은 함수에서 나오므로
@@ -218,10 +258,12 @@ hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입 + 지난 원정
 hooks/rpg-xp.js                XP 지급, 레벨업 알림
 hooks/rpg-summary.js           SessionEnd — 이번 세션 획득량 기록
 hooks/rpg-statusline.js        statusline 세그먼트 (모듈 겸 CLI)
+hooks/rpg-dots.js              도트 그래픽 — 막대·스파크라인·보스 스프라이트
 hooks/rpg-text.js              훅이 찍는 라벨의 ko/en 표
 skills/rpg/SKILL.md            서술 규칙 원본 — 여기만 고치면 된다
 tests/rpg-state.test.js        상태 저장 · 레벨 곡선 · 프로젝트 기록
 tests/rpg-progress.test.js     신호표 · 보스 수명주기 · 업적 경계값 · 전투 기록
+tests/rpg-dots.test.js         막대·스파크라인 경계값
 tests/rpg-scan.test.js         계급 · 장비 무게 경계값
 tests/rpg-xp.test.js           XP 지급 hook 통합 (실제 프로세스에 페이로드를 흘린다)
 package.json                   npm test 진입점 (의존성 0개)
@@ -244,13 +286,14 @@ package.json                   npm test 진입점 (의존성 0개)
 ## 테스트
 
 ```bash
-npm test          # 네 스위트 전부. 하나라도 실패하면 exit 1
+npm test          # 다섯 스위트 전부. 하나라도 실패하면 exit 1
 ```
 
 개별 실행:
 
 ```bash
 node tests/rpg-state.test.js
+node tests/rpg-dots.test.js
 node tests/rpg-progress.test.js
 node tests/rpg-scan.test.js
 node tests/rpg-xp.test.js

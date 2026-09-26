@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { t, DEFAULT_LANG } = require('./rpg-text');
+const { meter } = require('./rpg-dots');
 
 const BUDGET_MS = 3000; // 전체 예산. 넘으면 그때까지의 값으로 partial 반환
 const MAX_FILES = 5000;
@@ -400,10 +401,11 @@ function card(r, { art = true, lang = DEFAULT_LANG } = {}) {
   const weightName = lang === 'en' ? r.weight.en : r.weight.ko;
 
   lines.push(
-    `${label('rank')}: ${rankName(lang, r.rank.tier)} · ${label('score')} ${r.rank.score}/100${gate}`,
+    `${label('rank')}: ${rankName(lang, r.rank.tier)} · ${label('score')} ${r.rank.score}/100 ${meter(r.rank.score / 100)}${gate}`,
     `${label('size')}: ${label('files')} ${r.files} · ${kb(r.bytes)} · ` +
       `${label('tests')} ${r.tests} · ${label('commits')} ${r.commits} · ${todos}`,
-    `${label('weight')}: ${weightName} (${label('weightIndex')} ${r.weight.index}, ` +
+    `${label('weight')}: ${weightName} ${meter(r.weight.index / 100)} ` +
+      `(${label('weightIndex')} ${r.weight.index}, ` +
       `${label('avg')} ${kb(r.weight.avgBytes)}${label('perFile')})`
   );
 
