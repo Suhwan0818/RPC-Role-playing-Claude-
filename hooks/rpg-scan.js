@@ -79,6 +79,18 @@ const ART = [
   ['▒░▓█▓░▒', '▒░▓▓▓░▒', '▒▓████▓', '▒▓█▓█▓▒', '░░█░█░░'],
 ];
 
+/**
+ * 계급 이름. 한국어는 `성기사 (Paladin)`, 영어는 `Paladin`.
+ * short 면 괄호를 뺀다 (--brief 와 승급/강등 줄처럼 짧아야 하는 자리).
+ * 카드와 brief 가 같은 함수를 쓰므로 한쪽만 한국어로 굳는 일이 없다.
+ */
+function rankName(lang, tier, { short = false } = {}) {
+  const r = RANKS[tier];
+  if (!r) return t(lang, 'unknownRank');
+  if (lang === 'en') return r.en;
+  return short ? r.ko : `${r.ko} (${r.en})`;
+}
+
 function tierFor(table, value) {
   let index = 0;
   for (let i = 0; i < table.length; i += 1) {
@@ -292,11 +304,10 @@ function card(r, { art = true, lang = DEFAULT_LANG } = {}) {
   const label = (key) => t(lang, key);
   const gate = r.rank.gates.length ? ` (${label('cap')}: ${r.rank.gates.join(', ')})` : '';
   const todos = Number.isFinite(r.todos) ? `TODO ${r.todos}` : label('todosUnknown');
-  const rankName = lang === 'en' ? r.rank.en : `${r.rank.ko} (${r.rank.en})`;
   const weightName = lang === 'en' ? r.weight.en : r.weight.ko;
 
   lines.push(
-    `${label('rank')}: ${rankName} · ${label('score')} ${r.rank.score}/100${gate}`,
+    `${label('rank')}: ${rankName(lang, r.rank.tier)} · ${label('score')} ${r.rank.score}/100${gate}`,
     `${label('size')}: ${label('files')} ${r.files} · ${kb(r.bytes)} · ` +
       `${label('tests')} ${r.tests} · ${label('commits')} ${r.commits} · ${todos}`,
     `${label('weight')}: ${weightName} (${label('weightIndex')} ${r.weight.index}, ` +
@@ -319,7 +330,7 @@ function card(r, { art = true, lang = DEFAULT_LANG } = {}) {
   return lines.join('\n');
 }
 
-module.exports = { evaluate, card, RANKS, WEIGHTS, ART, HEAVY_BYTES, BUDGET_MS };
+module.exports = { evaluate, card, rankName, RANKS, WEIGHTS, ART, HEAVY_BYTES, BUDGET_MS };
 
 // ── CLI ──────────────────────────────────────────────────────────────
 if (require.main === module) {

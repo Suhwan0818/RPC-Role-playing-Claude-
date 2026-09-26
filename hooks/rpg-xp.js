@@ -3,6 +3,7 @@
 // 실제로 일어난 일에만 XP 를 준다. 지어낸 수치는 없다.
 
 const { read, write, award, progress } = require('./rpg-state');
+const { t } = require('./rpg-text');
 
 const XP_EDIT = 10; // 파일 편집 성공
 const XP_LINT = 10; // lint 통과
@@ -76,9 +77,7 @@ process.stdin.on('end', () => {
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PostToolUse',
-          additionalContext:
-            `⬆ LEVEL UP — Lv.${result.from} → Lv.${p.level} (누적 XP ${result.state.xp}). ` +
-            '이번 응답 끝에 한 줄로 알릴 것.',
+          additionalContext: t(state.lang, 'levelUp', result.from, p.level, result.state.xp),
         },
       })
     );

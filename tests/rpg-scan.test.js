@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { evaluate, card, RANKS, WEIGHTS, HEAVY_BYTES } = require('../hooks/rpg-scan');
+const { evaluate, card, rankName, RANKS, WEIGHTS, HEAVY_BYTES } = require('../hooks/rpg-scan');
 
 const roots = [];
 
@@ -22,12 +22,12 @@ function makeProject(files) {
   return root;
 }
 
-const rankName = (r) => RANKS[r.rank.tier].ko;
+const rankKo = (r) => RANKS[r.rank.tier].ko;
 const weightName = (r) => WEIGHTS[r.weight.tier].ko;
 
 // ── 파일 하나짜리 = 떠돌이 ───────────────────────────────────────
 const empty = evaluate(makeProject({ 'a.js': 'let a = 1\n' }));
-assert.strictEqual(rankName(empty), '떠돌이', '파일 하나짜리는 떠돌이');
+assert.strictEqual(rankKo(empty), '떠돌이', '파일 하나짜리는 떠돌이');
 assert.strictEqual(empty.rank.score, 0);
 assert.strictEqual(empty.commits, 0, 'git 이 아니면 커밋 0');
 assert.strictEqual(empty.todos, null, 'git 이 아니면 TODO 는 미측정(null)');
@@ -49,7 +49,7 @@ const noTests = evaluate(
   })
 );
 assert.ok(noTests.rank.score >= 40, '장비를 다 갖췄으니 점수 자체는 높다');
-assert.strictEqual(rankName(noTests), '견습', '테스트가 없으면 견습이 상한');
+assert.strictEqual(rankKo(noTests), '견습', '테스트가 없으면 견습이 상한');
 assert.ok(noTests.rank.gates.includes('테스트 없음'), '상한 이유를 밝힌다');
 
 // ── 테스트까지 있으면 게이트가 풀린다 ────────────────────────────
@@ -141,6 +141,14 @@ assert.ok(card(empty, { lang: 'en' }).includes('TODO not measured'), '미측정�
 // 알 수 없는 언어는 기본값(ko)으로 떨어진다
 assert.strictEqual(card(heavy, { lang: 'fr' }), card(heavy), '모르는 언어는 한국어로');
 
+
+// ── 계급 이름은 한 함수에서만 나온다 (카드와 --brief 가 갈라지지 않게) ──
+assert.strictEqual(rankName('ko', 5), '성기사 (Paladin)');
+assert.strictEqual(rankName('ko', 5, { short: true }), '성기사', 'short 면 괄호를 뺀다');
+assert.strictEqual(rankName('en', 5), 'Paladin');
+assert.strictEqual(rankName('en', 5, { short: true }), 'Paladin', '영어는 원래 한 이름');
+assert.strictEqual(rankName('ko', 99), '알 수 없음', '표 밖의 구간은 알 수 없음');
+assert.strictEqual(rankName('en', 99), 'unknown');
 // ── 표가 서로 어긋나지 않는다 ────────────────────────────────────
 assert.strictEqual(RANKS.length, 7);
 for (let i = 1; i < RANKS.length; i += 1) {
