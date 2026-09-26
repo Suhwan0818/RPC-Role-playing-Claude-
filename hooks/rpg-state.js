@@ -18,6 +18,7 @@ const STATE_PATH = path.join(claudeDir, '.rpg-state.json');
 
 const MAX_PROJECTS = 20; // 계급 변화를 감지할 만큼만 기억한다
 const MAX_TIER = 15; // rank/weight 구간 번호의 상한. 우리가 쓰는 표보다 넉넉하게 잡은 검증용 값
+const STALE_SESSION_MS = 12 * 60 * 60 * 1000; // 이보다 오래된 기준선은 죽은 세션으로 본다
 
 const DEFAULT_STATE = Object.freeze({
   mode: 'full',
@@ -51,7 +52,24 @@ function progress(xp) {
   return { level, into: xp - floorXp, span: nextXp - floorXp };
 }
 
-/** 프로젝트별 마지막 계급 기록. 형식이 어긋난 항목은 버리고 최근 것부터 20개만 남긴다. */
+/**
+ * 프로젝트 경로 → 상태 키.
+ *
+ * 같은 저장소가 표기 차이로 두 번 기록되는 것을 막는다 — 실제 상태 파일에
+ * `C:/Users/.../RPG` 와 `C:\Users\...\RPG` 가 같이 들어가 가짜 승급을 만들었다.
+ * 드라이브 문자가 있으면 윈도우 경로이므로 대소문자까지 접는다 (윈도우 FS 는 구분하지 않는다).
+ * POSIX 경로는 대소문자를 구분하므로 구분자만 통일하고 그대로 둔다.
+ * path.resolve 는 쓰지 않는다 — POSIX 에서 `C:/x` 가 상대 경로로 해석돼 cwd 가 붙는다.
+ */
+function projectKey(root) {
+  const s = String(root || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  return /^[A-Za-z]:/.test(s) ? s.toLowerCase() : s;
+}
+
+/**
+ * 프로젝트별 마지막 계급 기록. 형식이 어긋난 항목은 버리고, 표기만 다른 중복은 접고,
+ * 최근 것부터 20개만 남긴다.
+ */
 function normalizeProjects(raw) {
   if (!raw || typeof raw !== 'object') return {};
   const valid = (v) =>
@@ -60,13 +78,19 @@ function normalizeProjects(raw) {
     Number.isInteger(v.rank) && v.rank >= 0 && v.rank <= MAX_TIER &&
     Number.isInteger(v.weight) && v.weight >= 0 && v.weight <= MAX_TIER;
 
-  const kept = Object.entries(raw)
+  const folded = new Map();
+  Object.entries(raw)
     .filter(([key, v]) => typeof key === 'string' && key && valid(v))
-    .map(([key, v]) => [key, { rank: v.rank, weight: v.weight, at: typeof v.at === 'string' ? v.at : null }])
     .sort((a, b) => String(b[1].at || '').localeCompare(String(a[1].at || '')))
-    .slice(0, MAX_PROJECTS);
+    .forEach(([key, v]) => {
+      const k = projectKey(key);
+      // 최신 항목이 먼저 오므로 처음 본 것만 남긴다 — 표기만 다른 중복이 여기서 접힌다
+      if (!folded.has(k)) {
+        folded.set(k, { rank: v.rank, weight: v.weight, at: typeof v.at === 'string' ? v.at : null });
+      }
+    });
 
-  return Object.fromEntries(kept);
+  return Object.fromEntries([...folded].slice(0, MAX_PROJECTS));
 }
 
 /**
@@ -121,12 +145,19 @@ function normalize(raw) {
 }
 
 /**
- * 이번 세션의 기준선을 현재 XP 로 새로 잡는다 (입력 변형 없음).
- * SessionStart 에서 부른다. 직전 세션 기록(lastSession)은 건드리지 않는다 —
- * 그 줄을 보여주는 건 같은 SessionStart 의 몫이다.
+ * 이번 세션의 기준선을 잡는다 (입력 변형 없음). SessionStart 에서 부른다.
+ *
+ * 이미 살아 있는 기준선이 있으면 그대로 둔다 — compact/clear 로 SessionStart 가 다시 돌아도
+ * 그 전에 번 XP 가 요약에서 빠지지 않는다. 기준선을 비우는 건 SessionEnd 의 몫이다
+ * (SessionEnd 는 async 라 clear 에서 SessionStart 와 순서가 보장되지 않는다).
+ * SessionEnd 없이 죽은 세션의 기준선이 영원히 남는 것은 12시간 만료로 막는다.
+ * 직전 세션 기록(lastSession)은 건드리지 않는다 — 그 줄을 보여주는 건 SessionStart 의 몫이다.
  */
 function startSession(state) {
   const before = normalize(state);
+  const startedAt = before.session && before.session.startedAt;
+  const live = startedAt && Date.now() - Date.parse(startedAt) < STALE_SESSION_MS;
+  if (live) return before;
   return normalize({
     ...before,
     session: { startXp: before.xp, startedAt: new Date().toISOString() },
@@ -167,7 +198,7 @@ function withProject(state, root, { rank, weight }) {
     ...before,
     projects: {
       ...before.projects,
-      [root]: { rank, weight, at: new Date().toISOString() },
+      [projectKey(root)]: { rank, weight, at: new Date().toISOString() },
     },
   });
 }
@@ -196,22 +227,22 @@ function write(state) {
 
 /**
  * XP 지급. 새 객체를 돌려준다 (입력 변형 없음).
+ * normalize 를 한 번 통과시켜 progress 같은 파생값이 낡은 채 새어 나가지 않게 한다.
  * @returns {{state: object, leveledUp: boolean, from: number}}
  */
 function award(state, { xp = 0, success = true } = {}) {
   const before = normalize(state);
-  const next = {
+  const next = normalize({
     ...before,
     xp: before.xp + Math.max(0, xp),
     streak: success ? before.streak + 1 : 0,
-  };
-  next.level = levelFor(next.xp);
+  });
   return { state: next, leveledUp: next.level > before.level, from: before.level };
 }
 
 module.exports = {
-  read, write, award, withProject, startSession, endSession, progress, levelFor,
-  STATE_PATH, MODES, XP_PER_LEVEL, MAX_PROJECTS,
+  read, write, award, withProject, startSession, endSession, progress, levelFor, projectKey,
+  STATE_PATH, MODES, XP_PER_LEVEL, MAX_PROJECTS, STALE_SESSION_MS,
 };
 
 // ── CLI ──────────────────────────────────────────────────────────────

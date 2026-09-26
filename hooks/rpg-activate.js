@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { read, write, withProject, startSession, progress } = require('./rpg-state');
+const { read, write, withProject, startSession, progress, projectKey } = require('./rpg-state');
 const { evaluate, card, RANKS } = require('./rpg-scan');
 
 const brief = process.argv.includes('--brief');
@@ -18,12 +18,14 @@ const state = read();
 if (state.mode === 'off') process.exit(0);
 
 const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+// 조회도 기록과 같은 키를 쓴다 — 표기가 달라 같은 저장소를 못 찾으면 가짜 승급이 나온다.
+const knownKey = projectKey(projectRoot);
 const p = progress(state.xp);
 const statusLine = `Lv.${p.level} · XP ${p.into}/${p.span} · 연속 ${state.streak}`;
 
 // 매 프롬프트마다 도는 경로다. 절대 스캔하지 않는다 — 저장된 계급만 얹는다.
 if (brief) {
-  const known = state.projects[projectRoot];
+  const known = state.projects[knownKey];
   const rankName = known && RANKS[known.rank] ? ` · ${RANKS[known.rank].ko}` : '';
   process.stdout.write(
     `RPG MODE ACTIVE (${state.mode}) — ${statusLine}${rankName}. ` +
@@ -70,7 +72,7 @@ let next = startSession(state);
 // 프로젝트 측정. 실패해도 세션은 떠야 하므로 통째로 감싼다.
 try {
   const scan = evaluate(projectRoot);
-  const known = state.projects[projectRoot];
+  const known = state.projects[knownKey];
   out.push(
     '',
     '## 이번 프로젝트 (측정값 — 이 수치 밖의 것은 지어내지 말 것)',

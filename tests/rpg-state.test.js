@@ -69,13 +69,13 @@ assert.deepStrictEqual(reloaded.progress, { into: 120, span: 300 }, 'statusline 
 // ── 프로젝트 계급 기록 ─────────────────────────────────────────
 const noted = state.withProject({ mode: 'full', xp: 0 }, 'C:/proj/a', { rank: 3, weight: 1 });
 assert.deepStrictEqual(
-  { rank: noted.projects['C:/proj/a'].rank, weight: noted.projects['C:/proj/a'].weight },
+  { rank: noted.projects['c:/proj/a'].rank, weight: noted.projects['c:/proj/a'].weight },
   { rank: 3, weight: 1 }
 );
-assert.ok(!Number.isNaN(Date.parse(noted.projects['C:/proj/a'].at)), 'at 은 ISO 시각');
+assert.ok(!Number.isNaN(Date.parse(noted.projects['c:/proj/a'].at)), 'at 은 ISO 시각');
 
 const bumped = state.withProject(noted, 'C:/proj/a', { rank: 4, weight: 0 });
-assert.strictEqual(bumped.projects['C:/proj/a'].rank, 4, '같은 경로는 덮어쓴다');
+assert.strictEqual(bumped.projects['c:/proj/a'].rank, 4, '같은 경로는 덮어쓴다');
 assert.strictEqual(Object.keys(bumped.projects).length, 1);
 
 // 형식이 어긋난 항목은 버린다
@@ -88,7 +88,7 @@ const dirty = state.write({
     'C:/bad-shape': 'nope',
   },
 });
-assert.deepStrictEqual(Object.keys(dirty.projects), ['C:/good'], '깨진 항목은 버린다');
+assert.deepStrictEqual(Object.keys(dirty.projects), ['c:/good'], '깨진 항목은 버린다');
 
 // 20개를 넘으면 최근 것만 남긴다
 let many = { mode: 'full', xp: 0, projects: {} };
@@ -99,14 +99,57 @@ for (let i = 0; i < 25; i += 1) {
 }
 const pruned = state.write(many);
 assert.strictEqual(Object.keys(pruned.projects).length, state.MAX_PROJECTS, '20개로 정리');
-assert.ok(pruned.projects['C:/p24'], '가장 최근 것은 남는다');
-assert.ok(!pruned.projects['C:/p0'], '가장 오래된 것은 버려진다');
+assert.ok(pruned.projects['c:/p24'], '가장 최근 것은 남는다');
+assert.ok(!pruned.projects['c:/p0'], '가장 오래된 것은 버려진다');
+
+
+// 표기만 다른 중복은 접힌다 — 실제 상태 파일에 슬래시/역슬래시 두 벌이 들어가 있었다
+const dupes = state.write({
+  mode: 'full',
+  xp: 0,
+  projects: {
+    'C:/Users/me/RPG': { rank: 5, weight: 1, at: '2026-09-26T08:55:06.775Z' },
+    'C:\\Users\\me\\RPG': { rank: 3, weight: 0, at: '2026-09-08T10:55:29.509Z' },
+  },
+});
+assert.strictEqual(Object.keys(dupes.projects).length, 1, '같은 저장소는 한 항목으로 접힌다');
+assert.strictEqual(dupes.projects['c:/users/me/rpg'].rank, 5, '최신 기록이 이긴다');
+
+// POSIX 경로는 대소문자를 구분하므로 접지 않는다
+const posix = state.write({
+  mode: 'full',
+  xp: 0,
+  projects: {
+    '/home/me/Proj': { rank: 1, weight: 0, at: '2026-01-02T00:00:00.000Z' },
+    '/home/me/proj': { rank: 2, weight: 0, at: '2026-01-01T00:00:00.000Z' },
+  },
+});
+assert.strictEqual(Object.keys(posix.projects).length, 2, 'POSIX 는 대소문자가 다르면 다른 경로');
 
 // ── 세션 기준선과 요약 ─────────────────────────────────────────
 const opened = state.startSession({ mode: 'full', xp: 120, streak: 2 });
 assert.strictEqual(opened.session.startXp, 120, '기준선은 현재 XP');
 assert.strictEqual(opened.session.startLevel, 2, 'startLevel 은 startXp 에서 재계산');
 assert.ok(!Number.isNaN(Date.parse(opened.session.startedAt)), 'startedAt 은 ISO 시각');
+
+
+// 살아 있는 기준선은 보존된다 — compact/clear 로 SessionStart 가 다시 돌아도 세션 XP 를 잃지 않는다
+const reopened = state.startSession({ ...opened, xp: 250 });
+assert.strictEqual(reopened.session.startXp, 120, '기준선을 다시 잡지 않는다');
+assert.strictEqual(reopened.session.startedAt, opened.session.startedAt, '시작 시각도 그대로');
+
+// 12시간을 넘긴 기준선은 죽은 세션으로 보고 새로 잡는다
+const staleAt = new Date(Date.now() - state.STALE_SESSION_MS - 1000).toISOString();
+const refreshed = state.startSession({
+  mode: 'full',
+  xp: 250,
+  session: { startXp: 120, startedAt: staleAt },
+});
+assert.strictEqual(refreshed.session.startXp, 250, '낡은 기준선은 현재 XP 로 교체');
+
+// 시작 시각이 없는 기준선도 새로 잡는다 (형식이 어긋난 파일에서 온 값)
+const noStamp = state.startSession({ mode: 'full', xp: 250, session: { startXp: 120 } });
+assert.strictEqual(noStamp.session.startXp, 250, '시각 없는 기준선은 믿지 않는다');
 
 const closed = state.endSession({ ...opened, xp: 320, streak: 6 });
 assert.strictEqual(closed.session, null, '닫으면 기준선을 비운다');
