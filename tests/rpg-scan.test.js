@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { evaluate, card, rankName, RANKS, WEIGHTS, HEAVY_BYTES } = require('../hooks/rpg-scan');
+const { evaluate, card, rankName, RANKS, WEIGHTS, RANK_ITEMS, HEAVY_BYTES } = require('../hooks/rpg-scan');
 
 const roots = [];
 
@@ -77,6 +77,8 @@ const heavy = evaluate(
     'package.json': '{}\n',
     'LICENSE': 'MIT\n',
     'docs/guide.md': 'x\n',
+    '.gitignore': 'node_modules\n',
+    'CHANGELOG.md': '# 0.1.0\n',
     '.github/workflows/ci.yml': 'on: push\n',
     'src/fat1.js': HEAVY_BYTES + 10,
     'src/fat2.js': HEAVY_BYTES + 10,
@@ -87,6 +89,9 @@ const heavy = evaluate(
     // 그래야 "장비 과중" 게이트가 실제로 상한을 누르는지 볼 수 있다.
     'tests/a.test.js': 'test\n',
     'tests/b.test.js': 'test\n',
+    'tests/c.test.js': 'test\n',
+    'tests/d.test.js': 'test\n',
+    'tests/e.test.js': 'test\n',
   })
 );
 assert.ok(heavy.rank.score >= 75, '게이트가 없었다면 성기사 이상이었을 점수');
@@ -141,6 +146,63 @@ assert.ok(card(empty, { lang: 'en' }).includes('TODO not measured'), '미측정�
 // 알 수 없는 언어는 기본값(ko)으로 떨어진다
 assert.strictEqual(card(heavy, { lang: 'fr' }), card(heavy), '모르는 언어는 한국어로');
 
+
+
+// ── 새 점수 항목: .gitignore · CHANGELOG · 릴리스 태그 · 최근 커밋 ──
+const bare = evaluate(makeProject({ 'a.js': 'x' }));
+assert.strictEqual(bare.hasGitignore, false);
+assert.strictEqual(bare.hasChangelog, false);
+assert.strictEqual(bare.hasTag, false, 'git 이 아니면 태그도 없다');
+assert.strictEqual(bare.commitAgeDays, null, '못 쟀으면 null — 0 으로 속이지 않는다');
+
+const extras = evaluate(
+  makeProject({ 'a.js': 'x', '.gitignore': 'node_modules', 'CHANGELOG.md': '# 0.1.0' })
+);
+assert.ok(extras.hasGitignore && extras.hasChangelog, '루트의 .gitignore 와 CHANGELOG 를 알아본다');
+assert.strictEqual(extras.rank.score - bare.rank.score, 6, '.gitignore + CHANGELOG = 6점');
+
+// ── 점수표가 스스로 어긋나지 않는다 ──────────────────────────────
+const itemTotal = RANK_ITEMS.reduce((sum, i) => sum + i.points, 0);
+assert.strictEqual(itemTotal, 81, '항목 합계 81 + 밴드 19 = 100점');
+assert.strictEqual(RANK_ITEMS.filter((i) => i.slot).length, 6, '장비 슬롯은 여섯 칸');
+for (const item of RANK_ITEMS) {
+  assert.ok(item.points > 0 && item.label, item.id + ' 는 점수와 이름이 있어야 한다');
+}
+
+// 획득/미획득 목록은 항목 표를 남기지 않고 전부 나눠 갖는다
+assert.strictEqual(
+  withTests.rank.earned.length + withTests.rank.missing.length,
+  RANK_ITEMS.length,
+  '모든 항목은 획득이거나 미획득이다'
+);
+const earnedPoints = RANK_ITEMS.filter((i) => withTests.rank.earned.includes(i.id)).reduce(
+  (sum, i) => sum + i.points,
+  0
+);
+assert.ok(withTests.rank.score >= earnedPoints, '점수는 획득 항목 합 이상 (밴드가 더해진다)');
+assert.ok(
+  withTests.rank.missing[0].points >= withTests.rank.missing[1].points,
+  '큰 점수부터 알려준다'
+);
+
+// ── 카드: 장비 슬롯과 다음 계급 ──────────────────────────────────
+const gearCard = card(withTests, { art: false });
+assert.ok(gearCard.includes('장비: 투구 README ✓'), '슬롯을 그린다');
+assert.ok(/다음 계급: .*까지 -?[0-9]+점 — /.test(gearCard), '남은 점수와 항목을 댄다');
+
+// 상한이 걸렸으면 점수 대신 풀 조건을 말한다 — 점수를 더 벌어도 오르지 않기 때문
+assert.ok(
+  card(noTests, { art: false }).includes('다음 계급: 상한(테스트 없음)'),
+  '테스트 게이트를 이유로 댄다'
+);
+assert.ok(
+  card(heavy, { art: false }).includes('다음 계급: 상한(장비 과중)'),
+  '무게 게이트를 이유로 댄다'
+);
+
+const gearEn = card(withTests, { art: false, lang: 'en' });
+assert.ok(gearEn.includes('Gear: helmet README'), '슬롯도 영어로');
+assert.ok(/Next rank: [0-9-]+ points to /.test(gearEn));
 
 // ── 계급 이름은 한 함수에서만 나온다 (카드와 --brief 가 갈라지지 않게) ──
 assert.strictEqual(rankName('ko', 5), '성기사 (Paladin)');

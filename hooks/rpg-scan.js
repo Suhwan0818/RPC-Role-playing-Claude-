@@ -15,6 +15,7 @@ const BUDGET_MS = 3000; // 전체 예산. 넘으면 그때까지의 값으로 pa
 const MAX_FILES = 5000;
 const MAX_DEPTH = 8;
 const HEAVY_BYTES = 32 * 1024; // 이보다 크면 "거대 파일"
+const FRESH_DAYS = 30; // 이보다 오래되면 "최근 커밋" 점수를 주지 않는다
 
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'dist', 'build', 'out', 'target', 'vendor',
@@ -168,6 +169,26 @@ function countCommits(root) {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** 릴리스 태그가 하나라도 있는지. git 이 없거나 저장소가 아니면 false. */
+function hasReleaseTag(root) {
+  const r = spawnSync('git', ['-C', root, 'tag'], {
+    timeout: 800, maxBuffer: 1024 * 1024, encoding: 'utf8',
+  });
+  if (r.error || r.status !== 0 || typeof r.stdout !== 'string') return false;
+  return r.stdout.split('\n').some((line) => line.trim());
+}
+
+/** 마지막 커밋이 며칠 전인지. 못 쟀으면 null — 0 으로 속이지 않는다. */
+function lastCommitAgeDays(root) {
+  const r = spawnSync('git', ['-C', root, 'log', '-1', '--format=%ct'], {
+    timeout: 800, encoding: 'utf8',
+  });
+  if (r.error || r.status !== 0) return null;
+  const seconds = parseInt(String(r.stdout).trim(), 10);
+  if (!Number.isFinite(seconds)) return null;
+  return Math.max(0, Math.floor((Date.now() / 1000 - seconds) / 86400));
+}
+
 function bandPoints(value, bands) {
   let points = 0;
   for (const [threshold, score] of bands) {
@@ -233,6 +254,10 @@ function evaluate(root) {
     hasCI: CI_PATHS.some((p) => has(root, p)),
     hasManifest: MANIFESTS.some((p) => has(root, p)),
     hasDocs: DOC_PATHS.some((p) => has(root, p)),
+    hasGitignore: has(root, '.gitignore'),
+    hasChangelog: rootEntries.some((n) => /^changelog([.]|$)/i.test(n)),
+    hasTag: isRepo && Date.now() < deadline ? hasReleaseTag(root) : false,
+    commitAgeDays: isRepo && Date.now() < deadline ? lastCommitAgeDays(root) : null,
     partial: Date.now() > deadline,
     elapsedMs: Date.now() - started,
   };
@@ -259,20 +284,58 @@ function weighEquipment(m) {
   return { index, tier, avgBytes, ...WEIGHTS[tier] };
 }
 
+/** 테스트 파일 비율. 파일이 없으면 0. */
+function testRatio(m) {
+  return m.files > 0 ? m.tests / m.files : 0;
+}
+
+/**
+ * 계급 점수 항목. 합계 81점 + 커밋/파일 밴드 19점 = 정확히 100점.
+ *
+ * 표로 둔 이유: 점수를 매기는 곳과 "무엇이 빠졌고 몇 점인지" 를 말하는 곳이 하나여야
+ * 한다. 예전에는 점수는 식으로, 빠진 장비는 별도 목록으로 만들어 서로 어긋날 수 있었다.
+ * slot 이 있는 항목은 카드에 장비 슬롯으로 그려진다.
+ */
+const RANK_ITEMS = Object.freeze([
+  { id: 'readme', points: 8, slot: 'helmet', label: 'README', has: (m) => m.hasReadme },
+  { id: 'tests', points: 16, slot: 'weapon', label: 'tests', has: (m) => m.tests > 0 },
+  { id: 'ci', points: 14, slot: 'shield', label: 'CI', has: (m) => m.hasCI },
+  { id: 'manifest', points: 8, slot: 'armor', label: 'manifest', has: (m) => m.hasManifest },
+  { id: 'license', points: 3, slot: 'cloak', label: 'license', has: (m) => m.hasLicense },
+  { id: 'docs', points: 5, slot: 'boots', label: 'docs', has: (m) => m.hasDocs },
+  { id: 'gitignore', points: 3, slot: null, label: '.gitignore', has: (m) => m.hasGitignore },
+  { id: 'changelog', points: 3, slot: null, label: 'CHANGELOG', has: (m) => m.hasChangelog },
+  { id: 'ratio15', points: 8, slot: null, label: 'ratio15', has: (m) => testRatio(m) >= 0.15 },
+  { id: 'ratio30', points: 4, slot: null, label: 'ratio30', has: (m) => testRatio(m) >= 0.3 },
+  { id: 'tag', points: 5, slot: null, label: 'tag', has: (m) => m.hasTag },
+  {
+    id: 'fresh',
+    points: 4,
+    slot: null,
+    label: 'fresh',
+    has: (m) => m.commitAgeDays !== null && m.commitAgeDays <= FRESH_DAYS,
+  },
+]);
+
 /** 계급 점수 0-100 과 구간. 하드 게이트가 상한을 누른다. */
 function rankProject(m, weight) {
-  const testRatio = m.files > 0 ? m.tests / m.files : 0;
+  const earned = [];
+  const gaps = [];
+  let items = 0;
+  for (const item of RANK_ITEMS) {
+    if (item.has(m)) {
+      items += item.points;
+      earned.push(item.id);
+    } else {
+      gaps.push({ id: item.id, points: item.points, label: item.label });
+    }
+  }
+
   const score = Math.min(
     100,
-    (m.hasManifest ? 10 : 0) +
-      (m.hasReadme ? 10 : 0) +
-      (m.hasDocs ? 5 : 0) +
-      (m.hasLicense ? 5 : 0) +
-      (m.hasCI ? 15 : 0) +
-      (m.tests > 0 ? 20 : 0) +
-      (testRatio >= 0.15 ? 10 : 0) +
-      bandPoints(m.commits, [[1, 2], [5, 5], [20, 8], [100, 12], [500, 15]]) +
-      bandPoints(m.files, [[3, 2], [10, 5], [30, 8], [100, 10]])
+    items +
+      bandPoints(m.commits, [[1, 2], [5, 4], [20, 7], [100, 10], [500, 12]]) +
+      bandPoints(m.files, [[3, 2], [10, 4], [30, 6], [100, 7]])
   );
 
   let tier = tierFor(RANKS, score);
@@ -289,7 +352,37 @@ function rankProject(m, weight) {
     gates.push('장비 과중');
   }
 
-  return { score, tier, gates, ...RANKS[tier] };
+  gaps.sort((a, b) => b.points - a.points);
+  return { score, tier, gates, earned, missing: gaps, ...RANKS[tier] };
+}
+
+/** 점수 항목 이름. 고유명사는 그대로, 나머지는 표에서 가져온다. */
+function itemLabel(lang, label) {
+  const keys = {
+    tests: 'tests',
+    manifest: 'manifest',
+    docs: 'docsItem',
+    license: 'licenseItem',
+    ratio15: 'ratio15',
+    ratio30: 'ratio30',
+    tag: 'tagItem',
+    fresh: 'freshItem',
+  };
+  return keys[label] ? t(lang, keys[label]) : label;
+}
+
+/**
+ * 다음 계급까지 무엇이 남았나. 상한이 걸려 있으면 점수 대신 풀 조건을 말한다 —
+ * 점수를 더 벌어도 오르지 않는 상황에서 "3점 남았다" 는 거짓말이다.
+ */
+function nextRankLine(r, lang) {
+  if (r.rank.gates.length) return t(lang, 'nextGated', r.rank.gates.join(', '));
+  const next = RANKS[r.rank.tier + 1];
+  if (!next) return t(lang, 'nextTop');
+  const need = next.min - r.rank.score;
+  const picks = r.rank.missing.slice(0, 3).map((x) => `${itemLabel(lang, x.label)}(+${x.points})`);
+  const how = picks.length ? picks.join(' · ') : t(lang, 'nextGrow');
+  return t(lang, 'nextNeed', rankName(lang, r.rank.tier + 1, { short: true }), need, how);
 }
 
 /**
@@ -319,18 +412,22 @@ function card(r, { art = true, lang = DEFAULT_LANG } = {}) {
     lines.push(`${label('heavyFiles')} ${r.heavyCount}${label('heavyUnit')}: ${top}`);
   }
 
-  const missing = [];
-  if (!r.hasReadme) missing.push('README');
-  if (r.tests === 0) missing.push(label('tests'));
-  if (!r.hasCI) missing.push('CI');
-  if (!r.hasManifest) missing.push(label('manifest'));
-  if (missing.length) lines.push(`${label('missing')}: ${missing.join(', ')}`);
+  // 장비 슬롯. 이미 잰 플래그를 다시 그리는 표현일 뿐 — 새 측정은 없다.
+  const earned = new Set(r.rank.earned);
+  const slots = RANK_ITEMS.filter((i) => i.slot).map(
+    (i) => `${label('slot_' + i.slot)} ${itemLabel(lang, i.label)} ${earned.has(i.id) ? '✓' : '✗'}`
+  );
+  lines.push(`${label('gear')}: ${slots.join(' · ')}`);
+  lines.push(`${label('nextRank')}: ${nextRankLine(r, lang)}`);
   if (r.partial) lines.push(t(lang, 'partial', BUDGET_MS));
 
   return lines.join('\n');
 }
 
-module.exports = { evaluate, card, rankName, RANKS, WEIGHTS, ART, HEAVY_BYTES, BUDGET_MS };
+module.exports = {
+  evaluate, card, rankName, testRatio,
+  RANKS, WEIGHTS, RANK_ITEMS, ART, HEAVY_BYTES, BUDGET_MS, FRESH_DAYS,
+};
 
 // ── CLI ──────────────────────────────────────────────────────────────
 if (require.main === module) {
