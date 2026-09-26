@@ -17,11 +17,14 @@ statusline: `Lv.3 ███░░░░░ 120/300 *4`
 세션 첫 응답에는 프로젝트 계급 카드가 붙는다:
 
 ```
-   ░░███░░
-   ░░▒█▒░░
-   ░▒████▓     계급: 모험가 (Adventurer) · 점수 52/100
-   ░░█░█▓░     규모: 파일 12 · 57KB · 테스트 2 · 커밋 3 · TODO 17
-   ░░▒░▒░░     장비 무게: 적당 (지수 15, 평균 5KB/파일)
+   ░░▓█▓░░
+   ░░▓▓▓░░
+   ░▓████▓   계급: 성기사 (Paladin) · 점수 77/100
+   ░▓███▓░   규모: 파일 20 · 121KB · 테스트 4 · 커밋 13 · TODO 19
+   ░░█░█░░   장비 무게: 적당 (지수 25, 평균 6KB/파일)
+
+장비: 투구 README ✓ · 무기 테스트 ✓ · 방패 CI ✓ · 갑옷 매니페스트 ✓ · 망토 라이선스 ✓ · 장화 문서 ✓
+다음 계급: 용사까지 13점 — 릴리스 태그(+5) · 테스트 비율 30%(+4) · CHANGELOG(+3)
 ```
 
 ## 설치
@@ -63,7 +66,7 @@ if (rpg) parts.push(rpg);
 
 **로컬 directory 마켓플레이스로 설치했을 때만** 해당한다 (`/plugin marketplace add <로컬 경로>`).
 `claude plugin list` 가 이 플러그인을 `failed to load` 로 표시할 수 있는데 실제로는 정상이다 —
-`claude plugin details rpg-mode` 는 Hooks (3) 을 보여주고, 새 세션에서 규칙 주입과 XP 지급이
+`claude plugin details rpg-mode` 는 Hooks (4) 을 보여주고, 새 세션에서 규칙 주입과 XP 지급이
 모두 동작하는 것을 확인했다. 소스가 OneDrive/한글 경로일 때 나오는 표시 문제로 보인다.
 
 ## 사용
@@ -74,6 +77,8 @@ if (rpg) parts.push(rpg);
 | `/rpg lite` | 헤더와 획득 줄만, 본문은 평범하게 |
 | `/rpg off` | 완전 해제 |
 | `/rpg full` | 다시 켜기 |
+| `/rpg log` | 최근 20건의 XP 이벤트 (실패 포함) |
+| `/rpg achievements` | 업적 해금 현황과 진행도 |
 | `/rpg reset` | 누적 XP 를 0 으로 (확인 후 실행) |
 | `/rpg lang en` | 계급 카드·상태줄을 영어로 (`ko` 로 되돌린다) |
 
@@ -88,23 +93,33 @@ if (rpg) parts.push(rpg);
 `떠돌이 → 마을 주민 → 견습 → 모험가 → 기사 → 성기사 → 용사`
 (Wanderer → Villager → Apprentice → Adventurer → Knight → Paladin → Hero)
 
-점수 100점 만점:
+점수 100점 만점. 항목 81점 + 커밋·파일 밴드 19점:
 
-| 항목 | 점수 |
-|------|------|
-| 매니페스트 (package.json, pyproject.toml, Cargo.toml …) | 10 |
-| README | 10 |
-| 문서 (docs/, CONTRIBUTING.md, CLAUDE.md) | 5 |
-| 라이선스 | 5 |
-| CI (.github/workflows 등) | 15 |
-| 테스트 파일 존재 | 20 |
-| 테스트 비율 15% 이상 | 10 |
-| 커밋 수 (1 / 5 / 20 / 100 / 500 이상) | 2 / 5 / 8 / 12 / 15 |
-| 파일 수 (3 / 10 / 30 / 100 이상) | 2 / 5 / 8 / 10 |
+| 항목 | 점수 | 장비 슬롯 |
+|------|------|-----------|
+| 테스트 파일 존재 | 16 | 무기 |
+| CI (.github/workflows 등) | 14 | 방패 |
+| README | 8 | 투구 |
+| 매니페스트 (package.json, pyproject.toml, Cargo.toml …) | 8 | 갑옷 |
+| 테스트 비율 15% 이상 / 30% 이상 | 8 / +4 | |
+| 문서 (docs/, CONTRIBUTING.md, CLAUDE.md, AGENTS.md) | 5 | 장화 |
+| 릴리스 태그 (`git tag`) | 5 | |
+| 최근 커밋 30일 이내 | 4 | |
+| 라이선스 | 3 | 망토 |
+| `.gitignore` | 3 | |
+| CHANGELOG | 3 | |
+| 커밋 수 (1 / 5 / 20 / 100 / 500 이상) | 2 / 4 / 7 / 10 / 12 | |
+| 파일 수 (3 / 10 / 30 / 100 이상) | 2 / 4 / 6 / 7 | |
 
 **상한 규칙** — 점수가 높아도 눌린다:
 - 테스트가 하나도 없으면 **견습**까지
 - 장비 무게가 `무거움` 이상이면 **기사**까지. 짐 진 채로는 용사가 못 된다
+
+상한이 걸리면 카드가 남은 점수 대신 상한 이유를 말한다. 점수를 더 벌어도 오르지 않는
+상황에서 "3점 남았다" 고 쓰면 거짓말이 되기 때문이다.
+
+점수를 매기는 표(`RANK_ITEMS`)와 "무엇이 빠졌고 몇 점인지" 를 말하는 곳은 같은 한 곳이다.
+그래서 `장비:` 줄과 `다음 계급:` 줄은 점수와 어긋날 수 없다.
 
 ## 장비 무게 — 덜어낼 게 쌓였나
 
@@ -127,6 +142,45 @@ if (rpg) parts.push(rpg);
 node hooks/rpg-scan.js [경로]   # 카드를 직접 찍어본다
 ```
 
+## 업적 · 보스전 · 전투 기록
+
+전부 실제 카운터에서 나온다. 조건과 진행도가 같은 함수에서 나오므로
+해금 판정과 `37/100` 표시가 어긋날 수 없다.
+
+```
+/rpg achievements
+```
+
+| 업적 | 조건 |
+|------|------|
+| 첫 피 | 커밋 1회 |
+| 검을 벼리다 / 백련 | 테스트 통과 10회 / 100회 |
+| 정비공 | 빌드 통과 25회 |
+| 기록자 | 커밋 50회 |
+| 출항 | PR 생성 1회 |
+| 무패 25 / 무패 100 | 최고 연속 25 / 100 |
+| 보스 사냥꾼 / 해결사 | 보스 격파 1회 / 5회 |
+| 베테랑 | Lv.10 |
+
+**보스전.** 같은 명령이 3회 이상 연속 실패하면 그 명령이 보스가 된다. 마침내 통과하면
+격파로 보너스 XP (실패 횟수 × 5, 상한 50). 점수 신호에 걸리는 Bash 명령만 상대한다 —
+실패한 `ls` 가 보스가 되면 소음이다. 하루 지난 보스는 폐기한다.
+
+보스전은 실패를 가리는 장치가 **아니다.** 실패는 그대로 실패로 보고되고, 격파 알림은
+고치는 데 실제로 든 시도 횟수만 말한다.
+
+**전투 기록.** 최근 20건을 남긴다 (실패 포함). XP 가 어디서 붙었는지 감사할 수 있어야
+지어낸 값이 아님이 보인다.
+
+```
+$ /rpg log
+전투 기록 (최근 4건)
+18:40  ✓ Bash   test     +40
+18:40  ✗ Bash   test       0
+18:40  ✗ Bash   test       0
+18:40  ✗ Bash   test       0
+```
+
 ## XP 는 어디서 오나
 
 지어내지 않는다. PostToolUse hook 이 실제 도구 실행 결과만 본다.
@@ -140,7 +194,11 @@ node hooks/rpg-scan.js [경로]   # 카드를 직접 찍어본다
 | 테스트 통과 (`pytest`, `jest`, `vitest`, `npm test`, `go test`, `cargo test` …) | +25 |
 | PR 생성 (`gh pr create`) | +40 |
 | 커밋 성공 (`git commit`) | +50 |
+| 보스 격파 (3회 이상 연속 실패한 명령을 통과) | 보너스 +실패×5 (상한 50) |
 | 실패 | 0 — 감점은 없고 연속 카운트만 끊긴다 |
+
+heredoc 본문은 신호 판정에서 제외한다 — 문서나 테스트에 `git commit` 을 적었을 뿐인데
+XP 가 붙으면 그건 지어낸 수치다 (실제로 났던 버그다).
 
 Bash 명령은 위 표 순서대로 **먼저 맞는 것 하나만** 센다. `npm run build` 가 테스트로
 잘못 잡히지 않도록 빌드를 테스트보다 앞에 두었다.
@@ -152,8 +210,9 @@ Bash 명령은 위 표 순서대로 **먼저 맞는 것 하나만** 센다. `npm
 ```
 .claude-plugin/plugin.json     플러그인 매니페스트
 .claude-plugin/marketplace.json 로컬 마켓플레이스 등록용
-hooks/hooks.json               SessionStart / UserPromptSubmit / PostToolUse 배선
+hooks/hooks.json               SessionStart / UserPromptSubmit / PostToolUse / SessionEnd 배선
 hooks/rpg-state.js             상태 저장 + 레벨 계산 (모듈 겸 CLI)
+hooks/rpg-progress.js          게임 규칙 원본 — 신호표·보스·업적·전투 기록
 hooks/rpg-scan.js              프로젝트 계급·장비 무게 측정 + 도트아트 (모듈 겸 CLI)
 hooks/rpg-activate.js          SKILL.md 를 읽어 규칙 주입 + 지난 원정 표시
 hooks/rpg-xp.js                XP 지급, 레벨업 알림
@@ -162,6 +221,7 @@ hooks/rpg-statusline.js        statusline 세그먼트 (모듈 겸 CLI)
 hooks/rpg-text.js              훅이 찍는 라벨의 ko/en 표
 skills/rpg/SKILL.md            서술 규칙 원본 — 여기만 고치면 된다
 tests/rpg-state.test.js        상태 저장 · 레벨 곡선 · 프로젝트 기록
+tests/rpg-progress.test.js     신호표 · 보스 수명주기 · 업적 경계값 · 전투 기록
 tests/rpg-scan.test.js         계급 · 장비 무게 경계값
 tests/rpg-xp.test.js           XP 지급 hook 통합 (실제 프로세스에 페이로드를 흘린다)
 package.json                   npm test 진입점 (의존성 0개)
@@ -184,13 +244,14 @@ package.json                   npm test 진입점 (의존성 0개)
 ## 테스트
 
 ```bash
-npm test          # 세 스위트 전부. 하나라도 실패하면 exit 1
+npm test          # 네 스위트 전부. 하나라도 실패하면 exit 1
 ```
 
 개별 실행:
 
 ```bash
 node tests/rpg-state.test.js
+node tests/rpg-progress.test.js
 node tests/rpg-scan.test.js
 node tests/rpg-xp.test.js
 ```
