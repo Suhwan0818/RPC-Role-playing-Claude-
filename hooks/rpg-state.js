@@ -12,6 +12,11 @@ const XP_PER_LEVEL = 100; // 레벨 n → n+1 에 필요한 XP = 100 * n
 const MODES = ['full', 'lite', 'off'];
 
 const { t, LANGS, DEFAULT_LANG } = require('./rpg-text');
+const {
+  signalFor, bossKey, nextBoss, appendLog, bumpCounts, newlyUnlocked,
+  normalizeCounts, normalizeBest, normalizeAchievements, normalizeBoss, normalizeLog,
+  ACHIEVEMENTS, achievementName,
+} = require('./rpg-progress');
 
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const STATE_PATH = path.join(claudeDir, '.rpg-state.json');
@@ -26,6 +31,11 @@ const DEFAULT_STATE = Object.freeze({
   xp: 0,
   level: 1,
   streak: 0,
+  best: Object.freeze({ streak: 0 }), // 최고 연속 — 업적의 근거. 끊겨도 기록은 남는다
+  counts: Object.freeze(normalizeCounts(null)), // 신호별 누적 횟수
+  achievements: Object.freeze([]), // 해금된 업적 id
+  boss: null, // { cmd, fails, since } — 연속 실패 중인 명령
+  log: Object.freeze([]), // 전투 기록 링 버퍼 (최근 20건)
   progress: Object.freeze({ into: 0, span: XP_PER_LEVEL }),
   projects: Object.freeze({}),
   session: null,
@@ -135,6 +145,11 @@ function normalize(raw) {
     xp,
     level: levelFor(xp), // 저장된 level 은 신뢰하지 않고 xp 에서 재계산
     streak: Number.isFinite(src.streak) && src.streak >= 0 ? Math.floor(src.streak) : 0,
+    best: normalizeBest(src.best),
+    counts: normalizeCounts(src.counts),
+    achievements: normalizeAchievements(src.achievements),
+    boss: normalizeBoss(src.boss),
+    log: normalizeLog(src.log),
     // 표시용 파생값. statusline 이 레벨 공식을 다시 구현하지 않도록 여기서 계산해 저장한다.
     progress: (({ into, span }) => ({ into, span }))(progress(xp)),
     projects: normalizeProjects(src.projects),
@@ -240,8 +255,51 @@ function award(state, { xp = 0, success = true } = {}) {
   return { state: next, leveledUp: next.level > before.level, from: before.level };
 }
 
+/**
+ * 도구 실행 하나를 상태에 반영한다 (입력 변형 없음). XP·연속·카운터·보스·전투 기록·업적을
+ * 한 번에 옮기는 유일한 통로 — 호출부가 순서를 잘못 맞출 여지를 두지 않는다.
+ *
+ * 순서가 중요하다: 보스 격파를 먼저 판정해 보너스를 확정하고, 그 합계로 XP 를 준다.
+ *
+ * @param {object} state
+ * @param {{tool: string, cmd?: string, ok?: boolean}} event
+ * @returns {{state, leveledUp, from, signal, xp, bonus, slain, unlocked}}
+ */
+function applyEvent(state, { tool, cmd, ok = true } = {}) {
+  const before = normalize(state);
+  const signal = signalFor(tool, cmd);
+  // 보스는 Bash 만 상대한다. 편집 실패를 보스로 만들면 이름 붙일 대상이 없다.
+  const key = tool === 'Bash' ? bossKey(cmd) : null;
+  const { boss, slain } = nextBoss(before.boss, { key, ok, scored: !!signal });
+
+  const base = ok && signal ? signal.xp : 0;
+  const bonus = slain ? slain.bonus : 0;
+  const gained = base + bonus;
+  const { state: awarded, leveledUp, from } = award(before, { xp: gained, success: ok });
+
+  const advanced = normalize({
+    ...awarded,
+    boss,
+    counts: bumpCounts(before.counts, { signal: signal && signal.name, ok, slain }),
+    best: { streak: Math.max(before.best.streak, awarded.streak) },
+    log: appendLog(before.log, { tool, signal: signal && signal.name, xp: gained, ok }),
+  });
+
+  const unlocked = newlyUnlocked(advanced);
+  return {
+    state: normalize({ ...advanced, achievements: [...advanced.achievements, ...unlocked] }),
+    leveledUp,
+    from,
+    signal: signal ? signal.name : null,
+    xp: gained,
+    bonus,
+    slain,
+    unlocked,
+  };
+}
+
 module.exports = {
-  read, write, award, withProject, startSession, endSession, progress, levelFor, projectKey,
+  read, write, award, applyEvent, withProject, startSession, endSession, progress, levelFor, projectKey,
   STATE_PATH, MODES, XP_PER_LEVEL, MAX_PROJECTS, STALE_SESSION_MS,
 };
 
@@ -259,6 +317,9 @@ if (require.main === module) {
         `XP ${p.into}/${p.span} (${t(lang, 'total')} ${current.xp}) | ` +
         `${t(lang, 'streak')} ${current.streak}\n`
     );
+    if (current.boss) {
+      process.stdout.write(t(lang, 'bossActive', current.boss.cmd, current.boss.fails) + '\n');
+    }
     // 현재 프로젝트 카드도 같이. 스캔은 여기서만 필요하므로 이 시점에 불러온다.
     try {
       const scan = require('./rpg-scan');
@@ -266,6 +327,32 @@ if (require.main === module) {
       process.stdout.write(scan.card(scan.evaluate(root), { lang }) + '\n');
     } catch (e) {
       process.stdout.write(t(lang, 'scanFailed') + '\n');
+    }
+  } else if (arg === 'log') {
+    // 전투 기록. XP 가 어디서 붙었는지 감사할 수 있어야 한다 — 그래야 지어낸 값이 아님이 보인다.
+    if (!current.log.length) {
+      process.stdout.write(t(lang, 'logEmpty') + '\n');
+    } else {
+      process.stdout.write(t(lang, 'logHeader', current.log.length) + '\n');
+      for (const e of [...current.log].reverse()) {
+        const time = e.at ? new Date(e.at).toTimeString().slice(0, 5) : '--:--';
+        const xp = e.xp > 0 ? '+' + e.xp : '0';
+        process.stdout.write(
+          `${time}  ${e.ok ? '✓' : '✗'} ${e.tool.padEnd(6)} ${(e.signal || '-').padEnd(7)} ${xp.padStart(4)}\n`
+        );
+      }
+    }
+  } else if (arg === 'achievements' || arg === 'ach') {
+    const unlocked = new Set(current.achievements);
+    process.stdout.write(t(lang, 'achHeader', unlocked.size, ACHIEVEMENTS.length) + '\n');
+    for (const a of ACHIEVEMENTS) {
+      const [have, need] = a.at(current);
+      const name = achievementName(lang, a.id);
+      process.stdout.write(
+        unlocked.has(a.id)
+          ? `  ✓ ${name}\n`
+          : `  · ${name} — ${t(lang, 'achLocked', Math.min(have, need), need)}\n`
+      );
     }
   } else if (arg === 'reset') {
     // 계급은 프로젝트의 성질이지 내 진행도가 아니다. XP 만 되돌린다.

@@ -106,5 +106,61 @@ state.write({ mode: 'off', xp: 320, session: { startXp: 100 } });
 runSummary();
 assert.ok(state.read().session, 'off 모드는 세션을 닫지 않는다');
 
+
+// ── 보스전: 같은 명령을 3번 깨뜨린 뒤 통과하면 격파다 ──────────────
+const NL = String.fromCharCode(10);
+state.write({ mode: 'full', xp: 0, streak: 0 });
+for (let i = 0; i < 3; i += 1) {
+  runHook({
+    tool_name: 'Bash',
+    tool_input: { command: 'pytest -q' },
+    tool_response: 'Error: Exit code 1' + NL + 'FAILED tests/x.py',
+  });
+}
+const fighting = state.read();
+assert.strictEqual(fighting.boss.fails, 3, '같은 명령의 연속 실패를 보스로 센다');
+assert.strictEqual(fighting.xp, 0, '실패에는 XP 가 없다');
+assert.strictEqual(fighting.counts.fail, 3, '실패 횟수도 센다');
+assert.strictEqual(fighting.streak, 0, '실패는 연속을 끊는다');
+
+const slainOut = runHook({
+  tool_name: 'Bash',
+  tool_input: { command: 'pytest -q' },
+  tool_response: { stdout: '3 passed' },
+});
+const won = state.read();
+assert.ok(/보스 격파/.test(slainOut), '격파를 컨텍스트로 알린다');
+assert.ok(/4번째 시도/.test(slainOut), '시도 횟수는 실제 실패 + 1');
+assert.strictEqual(won.xp, 40, '테스트 25 + 보너스 15');
+assert.strictEqual(won.boss, null, '격파한 보스는 사라진다');
+assert.strictEqual(won.counts.bossSlain, 1);
+assert.ok(won.achievements.includes('boss-slayer'), '업적도 함께 해금된다');
+assert.ok(/업적 해금/.test(slainOut), '해금도 한 번 알린다');
+
+// 전투 기록에 실패 3건과 성공 1건이 남는다 — 실패를 숨기지 않는다
+assert.strictEqual(won.log.length, 4);
+assert.strictEqual(won.log.filter((e) => !e.ok).length, 3);
+assert.strictEqual(won.log[3].xp, 40, '보너스까지 합친 값을 기록한다');
+
+// 실패한 Bash 는 문자열 "Error: Exit code 1" 로 온다 (실제 트랜스크립트에서 확인한 형태)
+state.write({ mode: 'full', xp: 0, streak: 5 });
+runHook({
+  tool_name: 'Bash',
+  tool_input: { command: 'npm test' },
+  tool_response: 'Error: Exit code 1' + NL + '2 failed',
+});
+assert.strictEqual(state.read().xp, 0, '실패 문자열은 XP 를 주지 않는다');
+assert.strictEqual(state.read().streak, 0);
+
+// heredoc 본문에 적힌 명령어는 XP 를 주지 않는다 — 언급은 실행이 아니다
+state.write({ mode: 'full', xp: 0, streak: 0 });
+runHook({
+  tool_name: 'Bash',
+  tool_input: { command: ['cat > a.md <<EOF', 'git commit -m x', 'EOF'].join(NL) },
+  tool_response: { stdout: '' },
+});
+assert.strictEqual(state.read().xp, 0, '본문의 언급은 커밋이 아니다');
+assert.strictEqual(state.read().log.length, 0, '기록도 남지 않는다');
+
 fs.rmSync(tmpDir, { recursive: true, force: true });
 console.log('rpg-xp 점검 통과 ✅');

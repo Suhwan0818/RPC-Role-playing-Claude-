@@ -41,7 +41,7 @@ const STRINGS = {
     mode: '모드',
     total: '누적',
     streak: '연속',
-    usage: '사용법: rpg-state.js on|off|full|lite|status|reset|lang <ko|en>',
+    usage: '사용법: rpg-state.js on|off|full|lite|status|reset|log|achievements|lang <ko|en>',
     scanFailed: '프로젝트 측정 실패 — 계급은 생략한다.',
     resetDone: 'RPG 진행도 초기화됨. Lv.1 XP 0 (프로젝트 계급 기록은 유지)',
     modeOn: 'RPG 모드 ON (full)',
@@ -70,6 +70,20 @@ const STRINGS = {
     rivals: (list) =>
       `동시 활성: ${list} — RPG 는 틀(헤더·획득 라인)만 담당하고 ` +
       '본문 문장 스타일은 그쪽 규칙을 따른다. 충돌 시 그쪽이 본문의 주인이다.',
+
+    // ── 보스 · 업적 알림 ──
+    bossSlain: (cmd, attempt, bonus) =>
+      `⚔ 보스 격파 — \`${cmd}\` ${attempt}번째 시도에서 통과. 보너스 XP +${bonus}. ` +
+      '이번 응답 끝에 한 줄로 알릴 것. 시도 횟수는 실제 실패 횟수다.',
+    achUnlock: (names) =>
+      `🏅 업적 해금 — ${names}. 이번 응답 끝에 한 줄로 알릴 것. 없는 업적을 지어내지 말 것.`,
+
+    // ── /rpg log · /rpg achievements ──
+    logHeader: (n) => `전투 기록 (최근 ${n}건)`,
+    logEmpty: '전투 기록이 없다. XP 를 주는 도구 실행이 아직 없었다.',
+    achHeader: (have, total) => `업적 ${have}/${total}`,
+    achLocked: (have, need) => `${have}/${need}`,
+    bossActive: (cmd, fails) => `보스: \`${cmd}\` — 연속 실패 ${fails}회`,
 
     // ── PostToolUse 알림 ──
     levelUp: (from, to, total) =>
@@ -100,7 +114,7 @@ const STRINGS = {
     mode: 'mode',
     total: 'total',
     streak: 'streak',
-    usage: 'usage: rpg-state.js on|off|full|lite|status|reset|lang <ko|en>',
+    usage: 'usage: rpg-state.js on|off|full|lite|status|reset|log|achievements|lang <ko|en>',
     scanFailed: 'Project scan failed — skipping rank.',
     resetDone: 'RPG progress reset. Lv.1 XP 0 (project ranks kept)',
     modeOn: 'RPG mode ON (full)',
@@ -129,6 +143,20 @@ const STRINGS = {
     rivals: (list) =>
       `Also active: ${list} — RPG owns only the frame (header and loot line); ` +
       'the prose style follows those rules. On conflict they own the body.',
+
+    // ── boss / achievement notices ──
+    bossSlain: (cmd, attempt, bonus) =>
+      `⚔ Boss slain — \`${cmd}\` passed on attempt ${attempt}. Bonus XP +${bonus}. ` +
+      'Announce it in one line at the end of this reply. The attempt count is real failures.',
+    achUnlock: (names) =>
+      `🏅 Achievement unlocked — ${names}. Announce it in one line at the end of this reply. Never invent one.`,
+
+    // ── /rpg log · /rpg achievements ──
+    logHeader: (n) => `Combat log (last ${n})`,
+    logEmpty: 'No combat log yet. No XP-scoring tool run so far.',
+    achHeader: (have, total) => `Achievements ${have}/${total}`,
+    achLocked: (have, need) => `${have}/${need}`,
+    bossActive: (cmd, fails) => `Boss: \`${cmd}\` — ${fails} consecutive failures`,
 
     // ── PostToolUse notice ──
     levelUp: (from, to, total) =>

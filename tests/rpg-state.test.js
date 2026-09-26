@@ -44,7 +44,11 @@ assert.strictEqual(loss.leveledUp, false);
 // ── 깨진 상태 파일 복구 ────────────────────────────────────────
 fs.writeFileSync(statePath, '{ 이건 JSON 이 아니다', 'utf8');
 assert.deepStrictEqual(state.read(), {
-  mode: 'full', lang: 'ko', xp: 0, level: 1, streak: 0, progress: { into: 0, span: 100 },
+  mode: 'full', lang: 'ko', xp: 0, level: 1, streak: 0,
+  best: { streak: 0 },
+  counts: { edit: 0, lint: 0, build: 0, push: 0, test: 0, pr: 0, commit: 0, fail: 0, bossSlain: 0 },
+  achievements: [], boss: null, log: [],
+  progress: { into: 0, span: 100 },
   projects: {}, session: null, lastSession: null, updatedAt: null,
 });
 

@@ -1,40 +1,13 @@
 #!/usr/bin/env node
 // rpg-mode — PostToolUse XP 지급 hook.
+//
 // 실제로 일어난 일에만 XP 를 준다. 지어낸 수치는 없다.
+// 점수표·보스·업적 규칙은 rpg-progress.js 에, 상태 전이는 rpg-state.applyEvent 에 있다.
+// 이 파일이 하는 일은 입출력뿐이다 — 규칙을 여기 베껴두지 않는다.
 
-const { read, write, award, progress } = require('./rpg-state');
+const { read, write, applyEvent, progress } = require('./rpg-state');
+const { signalFor, achievementName } = require('./rpg-progress');
 const { t } = require('./rpg-text');
-
-const XP_EDIT = 10; // 파일 편집 성공
-const XP_LINT = 10; // lint 통과
-const XP_BUILD = 15; // 빌드 통과
-const XP_PUSH = 20; // 푸시 성공
-const XP_TEST = 25; // 테스트 통과
-const XP_PR = 40; // PR 생성
-const XP_COMMIT = 50; // 커밋 성공
-
-// Bash 명령 → XP. 위에서부터 먼저 맞는 것 하나만 쓴다.
-// 순서가 규칙이다: git push 를 git commit 과 나란히 두고, 빌드를 테스트보다 앞에 두어야
-// `npm run build` 가 테스트 패턴에 잘못 걸리지 않는다.
-const BASH_SIGNALS = [
-  { xp: XP_PR, pattern: /\bgh\s+pr\s+create\b/ },
-  { xp: XP_COMMIT, pattern: /\bgit\s+commit\b/ },
-  { xp: XP_PUSH, pattern: /\bgit\s+push\b/ },
-  {
-    xp: XP_BUILD,
-    pattern:
-      /\b(npm run build|pnpm( run)? build|yarn build|tsc|cargo build|go build|mvn package|gradlew? build)\b/,
-  },
-  {
-    xp: XP_TEST,
-    pattern:
-      /\b(pytest|jest|vitest|npm (run )?test|pnpm test|yarn test|go test|cargo test|mvn test|gradle test)\b/,
-  },
-  {
-    xp: XP_LINT,
-    pattern: /\b(eslint|ruff|golangci-lint|npm run lint|pnpm( run)? lint|yarn lint|cargo clippy)\b/,
-  },
-];
 
 let raw = '';
 process.stdin.on('data', (d) => (raw += d));
@@ -50,34 +23,34 @@ process.stdin.on('end', () => {
   if (state.mode === 'off') process.exit(0);
 
   const tool = payload.tool_name || '';
-  const input = payload.tool_input || {};
-  const response = payload.tool_response;
+  const cmd = String((payload.tool_input || {}).command || '');
+  const ok = succeeded(payload.tool_response);
 
-  const ok = succeeded(response);
-  let xp = 0;
+  // 점수 신호도 없고 실패도 아니면 파일을 건드리지 않는다. 디스크 낭비 금지.
+  if (ok && !signalFor(tool, cmd)) process.exit(0);
 
-  if (/^(Edit|Write|MultiEdit)$/.test(tool)) {
-    if (ok) xp = XP_EDIT;
-  } else if (tool === 'Bash' && ok) {
-    const cmd = String(input.command || '');
-    const signal = BASH_SIGNALS.find((s) => s.pattern.test(cmd));
-    if (signal) xp = signal.xp;
-  }
-
-  // XP 도 없고 연속 카운트도 안 변하면 파일을 건드리지 않는다.
-  if (xp === 0 && ok) process.exit(0);
-
-  const result = award(state, { xp, success: ok });
+  const result = applyEvent(state, { tool, cmd, ok });
   write(result.state);
 
-  // 레벨업일 때만 컨텍스트에 알린다. 매 도구마다 알리면 소음이다.
+  // 알릴 것이 있을 때만 컨텍스트에 넣는다. 매 도구마다 알리면 소음이다.
+  const notes = [];
+  if (result.slain) {
+    notes.push(t(state.lang, 'bossSlain', result.slain.cmd, result.slain.attempt, result.slain.bonus));
+  }
   if (result.leveledUp) {
-    const p = progress(result.state.xp);
+    notes.push(t(state.lang, 'levelUp', result.from, progress(result.state.xp).level, result.state.xp));
+  }
+  if (result.unlocked.length) {
+    const names = result.unlocked.map((id) => achievementName(state.lang, id)).join(', ');
+    notes.push(t(state.lang, 'achUnlock', names));
+  }
+
+  if (notes.length) {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PostToolUse',
-          additionalContext: t(state.lang, 'levelUp', result.from, p.level, result.state.xp),
+          additionalContext: notes.join(' '),
         },
       })
     );
@@ -86,8 +59,11 @@ process.stdin.on('end', () => {
 
 /**
  * 도구 실행이 성공했는지 판정.
- * ponytail: PostToolUse 페이로드에 종료 코드가 항상 있지는 않다 — 있으면 쓰고,
- * 없으면 에러 필드를 본다. 정확한 코드가 필요해지면 그때 도구별 분기 추가.
+ *
+ * Bash 가 실패하면 tool_response 는 `"Error: Exit code 1\n…"` 문자열로 온다 (객체가 아니다).
+ * 성공한 Bash 는 `{ stdout, stderr, isImage, interrupted }` 객체이고 종료 코드가 없다 —
+ * 그래서 문자열 앞머리의 Error 를 먼저 본다.
+ * ponytail: 정확한 코드가 필요해지면 그때 도구별 분기를 추가한다.
  */
 function succeeded(response) {
   if (response == null) return true;

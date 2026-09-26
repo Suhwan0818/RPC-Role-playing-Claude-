@@ -8,6 +8,6 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/rpg-state.test.js && node tests/rpg-scan.test.js && node tests/rpg-xp.test.js"
+    "test": "node tests/rpg-state.test.js && node tests/rpg-progress.test.js && node tests/rpg-scan.test.js && node tests/rpg-xp.test.js"
   }
 }
